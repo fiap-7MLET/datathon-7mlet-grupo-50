@@ -31,6 +31,7 @@
 ## 2. Variáveis Derivadas
 
 | Variável              | Tipo | Como foi criada                          | Objetivo                                                              | Risco de Leakage |
+| --------------------- | ---- | ---------------------------------------- | --------------------------------------------------------------------- | ---------------- |
 | contacted_before      | int  | (df_clean['pdays'] != 999).astype(int)   | Indica se o cliente já foi contactado antes (baseado em pdays ≠999)   | Não              |
 | had_previous_contact  | int  | (df_clean['previous'] > 0).astype(int)   | Indica se há registro explícito de contatos anteriores (previous > 0) | Não              |
 
