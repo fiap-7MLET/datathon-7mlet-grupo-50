@@ -1,0 +1,310 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-06-29",
+  "description": "Catálogo de braços para experimento MAB adaptativo.",
+  "dataset_reference": {
+    "source": "UCI Bank-Marketing Dataset",
+    "n": 41188,
+    "base_conversion_rate_global": 0.113
+  },
+  "segments": {
+    "previous_converter": {
+      "rule": "poutcome == 'success'",
+      "conversion_rate": 0.651,
+      "global_multiplier": 5.78,
+      "note": "Cliente que já converteu em campanha anterior."
+    },
+    "high_season": {
+      "rule": "month in ['mar','sep','oct','dec']",
+      "conversion_rate": 0.465,
+      "global_multiplier": 4.12,
+      "note": "Meses com taxa 4x acima da média. Feature contextual/temporal."
+    },
+    "student_digital": {
+      "rule": "job == 'student' AND contact == 'cellular'",
+      "conversion_rate": 0.364,
+      "global_multiplier": 3.23,
+      "note": "Interação forte: student+cellular=36.4% vs student+telephone=15.2%."
+    },
+    "retired": {
+      "rule": "job == 'retired'",
+      "conversion_rate": 0.253,
+      "global_multiplier": 2.24,
+      "note": "Alta propensão geral. Aposentado não é público de previdência."
+    },
+    "admin_worker": {
+      "rule": "job == 'admin.'",
+      "conversion_rate": 0.13,
+      "global_multiplier": 1.15,
+      "note": "Menor taxa individual mas maior volume (~10k clientes)."
+    },
+    "university_educated": {
+      "rule": "education == 'university.degree'",
+      "conversion_rate": 0.137,
+      "global_multiplier": 1.21,
+      "note": "Mais receptivo a produtos complexos: PGBL, LCI/LCA com benefício fiscal."
+    },
+    "digital_channel": {
+      "rule": "contact == 'cellular'",
+      "conversion_rate": 0.147,
+      "global_multiplier": 1.3,
+      "note": "14.7% vs 5.2% telephone. Aumenta relevância de braços via app/push."
+    },
+    "debt_free": {
+      "rule": "housing == 'no' AND loan == 'no' AND default == 'no'",
+      "conversion_rate": null,
+      "global_multiplier": null,
+      "note": "Sem compromissos financeiros ativos. Maior capacidade de alocar capital."
+    },
+    "low_engagement": {
+      "rule": "previous == 0 AND pdays == 999",
+      "conversion_rate": null,
+      "global_multiplier": null,
+      "note": "Nunca foi abordado em campanhas anteriores. Abordagem inicial deve ser suave."
+    },
+    "student_saver": {
+      "rule": "job == 'student'",
+      "conversion_rate": 0.314,
+      "global_multiplier": 2.78,
+      "note": "Versão mais ampla do student_digital (todos os canais)."
+    }
+  },
+  "arms": [
+    {
+      "arm_id": "arm_001",
+      "name": "CDB 12 meses",
+      "description": "Certificado de Depósito Bancário com prazo fixo de 12 meses e rendimento prefixado.",
+      "channel": "app",
+      "base_conversion_rate": 0.11,
+      "reward_delay_days": 7,
+      "eligible_segments": [
+        "previous_converter",
+        "high_season",
+        "retired",
+        "admin_worker",
+        "university_educated",
+        "digital_channel",
+        "high_season"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 2.5,
+        "high_season": 1.6,
+        "student_digital": 1.4,
+        "retired": 1.2,
+        "admin_worker": 1.1,
+        "university_educated": 1.3,
+        "digital_channel": 1.2,
+        "debt_free": 1.4,
+        "low_engagement": 0.6
+      }
+    },
+    {
+      "arm_id": "arm_002",
+      "name": "Poupança digital",
+      "description": "Conta poupança com rendimento automático, sem prazo mínimo e acesso imediato.",
+      "channel": "app",
+      "base_conversion_rate": 0.13,
+      "reward_delay_days": 3,
+      "eligible_segments": [
+        "student_digital",
+        "student_saver",
+        "retired",
+        "low_engagement",
+        "digital_channel"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 1.8,
+        "high_season": 1.4,
+        "student_digital": 2.0,
+        "student_saver": 1.8,
+        "retired": 1.6,
+        "admin_worker": 1.1,
+        "university_educated": 1.0,
+        "digital_channel": 1.3,
+        "debt_free": 1.2,
+        "low_engagement": 1.1
+      }
+    },
+    {
+      "arm_id": "arm_003",
+      "name": "Previdência privada (PGBL)",
+      "description": "Plano de previdência PGBL com benefício de dedução no IR para declarantes completos.",
+      "channel": "email",
+      "base_conversion_rate": 0.08,
+      "reward_delay_days": 14,
+      "eligible_segments": [
+        "university_educated",
+        "admin_worker",
+        "debt_free",
+        "previous_converter",
+        "high_season"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 3.0,
+        "high_season": 1.2,
+        "student_digital": 0.5,
+        "student_saver": 0.4,
+        "retired": 0.3,
+        "admin_worker": 1.5,
+        "university_educated": 1.8,
+        "digital_channel": 1.1,
+        "debt_free": 1.6,
+        "low_engagement": 0.4
+      }
+    },
+    {
+      "arm_id": "arm_004",
+      "name": "LCI / LCA 90 dias",
+      "description": "Letra de Crédito Imobiliário ou do Agronegócio com prazo de 90 dias e isenção de Imposto de Renda.",
+      "channel": "app",
+      "base_conversion_rate": 0.14,
+      "reward_delay_days": 5,
+      "eligible_segments": [
+        "debt_free",
+        "university_educated",
+        "admin_worker",
+        "high_season",
+        "previous_converter"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 2.8,
+        "high_season": 1.7,
+        "student_digital": 0.8,
+        "student_saver": 0.7,
+        "retired": 1.4,
+        "admin_worker": 1.3,
+        "university_educated": 2.0,
+        "digital_channel": 1.2,
+        "debt_free": 2.2,
+        "low_engagement": 0.7
+      }
+    },
+    {
+      "arm_id": "arm_005",
+      "name": "CDB liquidez diária",
+      "description": "CDB com resgate disponível a qualquer momento, sem prazo mínimo. Rendimento menor que CDB tradicional.",
+      "channel": [
+        "app",
+        "push"
+      ],
+      "base_conversion_rate": 0.15,
+      "reward_delay_days": 2,
+      "eligible_segments": [
+        "retired",
+        "low_engagement",
+        "digital_channel",
+        "student_saver",
+        "admin_worker"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 2.0,
+        "high_season": 1.5,
+        "student_digital": 1.6,
+        "student_saver": 1.5,
+        "retired": 2.5,
+        "admin_worker": 1.2,
+        "university_educated": 1.1,
+        "digital_channel": 1.4,
+        "debt_free": 1.5,
+        "low_engagement": 1.8
+      }
+    },
+    {
+      "arm_id": "arm_006",
+      "name": "Oferta de reengajamento",
+      "description": "Mensagem de valor — não é oferta de produto. Exemplo: 'Veja quanto você deixou de render nos últimos 12 meses'. Objetivo: reativar engajamento para campanha futura.",
+      "channel": [
+        "email",
+        "sms"
+      ],
+      "base_conversion_rate": 0.06,
+      "reward_delay_days": 10,
+      "eligible_segments": [
+        "low_engagement",
+        "digital_channel"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 0.5,
+        "high_season": 1.3,
+        "student_digital": 1.2,
+        "student_saver": 1.1,
+        "retired": 1.0,
+        "admin_worker": 1.1,
+        "university_educated": 1.0,
+        "digital_channel": 1.4,
+        "debt_free": 0.9,
+        "low_engagement": 2.5
+      }
+    },
+    {
+      "arm_id": "arm_007",
+      "name": "CDB 24 meses (premium)",
+      "description": "CDB de longo prazo com taxa prefixada superior ao CDB de 12 meses. Para clientes com capital e disposição a investimento.",
+      "channel": [
+        "app",
+        "email"
+      ],
+      "base_conversion_rate": 0.09,
+      "reward_delay_days": 10,
+      "eligible_segments": [
+        "previous_converter",
+        "high_season",
+        "university_educated",
+        "debt_free",
+        "admin_worker"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 3.5,
+        "high_season": 1.8,
+        "student_digital": 0.6,
+        "student_saver": 0.5,
+        "retired": 0.7,
+        "admin_worker": 1.4,
+        "university_educated": 1.6,
+        "digital_channel": 1.1,
+        "debt_free": 1.8,
+        "low_engagement": 0.3
+      }
+    },
+    {
+      "arm_id": "arm_008",
+      "name": "Poupança estudantil",
+      "description": "Conta poupança com posicionamento voltado para estudantes: sem valor mínimo, rendimento automático, interface simplificada no app e metas de curto prazo.",
+      "channel": [
+        "app",
+        "push"
+      ],
+      "base_conversion_rate": 0.16,
+      "reward_delay_days": 2,
+      "eligible_segments": [
+        "student_saver",
+        "student_digital",
+        "digital_channel"
+      ],
+      "segment_multipliers": {
+        "previous_converter": 1.5,
+        "high_season": 1.3,
+        "student_digital": 3.5,
+        "student_saver": 3.0,
+        "retired": 0.2,
+        "admin_worker": 0.8,
+        "university_educated": 1.6,
+        "digital_channel": 1.8,
+        "debt_free": 0.9,
+        "low_engagement": 1.2
+      }
+    },
+    {
+      "arm_id": "arm_control",
+      "name": "Nenhuma ação",
+      "description": "Braço de controle — cliente não recebe oferta ativa. Mede conversão orgânica (baseline sem intervenção).",
+      "channel": null,
+      "base_conversion_rate": 0.04,
+      "reward_delay_days": 0,
+      "eligible_segments": [
+        "all"
+      ],
+      "segment_multipliers": {}
+    }
+  ]
+}
