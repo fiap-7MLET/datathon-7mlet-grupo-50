@@ -5,6 +5,7 @@
 > **Variável target:** `y` — adesão a depósito a prazo (yes/no)  
 > **Separador CSV:** `;`  
 > **Pipeline:** `BankMarketingPreprocessor` (`src/01_data_loader.py`)
+
 > **EDA:** `notebooks/01_eda.ipynb`
 
 ---
