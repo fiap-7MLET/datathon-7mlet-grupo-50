@@ -15,8 +15,19 @@ Nesse contexto, os dados sintéticos são a simulação do experimento em produ�
 
 Assim, esta documentação define descreve os *json* `offer_catalog.json`, `offer_events.json` e `delayed_rewards.json`
 
+---
 
+## 1.1. Papel de cada arquivo no projeto (o que é usado onde)
 
+Os três arquivos são gerados através do código `02_generate_synthetic.py` 
+
+| Arquivo | Papel no projeto |
+|---|---|---|
+| `offer_catalog.json` | **Modelo de recompensa do ambiente.** Define os braços, `base_conversion_rate` e `segment_multipliers` — a fonte de verdade sobre "quanto cada oferta converte para cada perfil". |
+| `offer_events.json` (200 linhas) | **Evidência de que a camada de experimentação sabe registrar uma decisão**: contexto do cliente, braço escolhido, segmentos derivados, probabilidades e sinalização de exploração |
+| `delayed_rewards.json` (200 linhas) | **Evidência de que o delayed reward está modelado**: liga um `offer_event` ao resultado observado dias depois, respeitando o `reward_delay_days` de cada braço. |
+
+**Por que `offer_events.json`/`delayed_rewards.json` não entram na avaliação dos algoritmos:** esses 200 eventos foram gerados usando o próprio Thompson Sampling como política de coleta (`generate_synthetic.py` já roda um TS simulado para escolher os braços). Usar esse log para depois "avaliar" o Thompson Sampling seria circular: estaríamos validando o algoritmo com dados que ele mesmo produziu. Além disso, 200 eventos são poucos para qualquer algoritmo de bandit convergir de forma visível
 
 ---
 
