@@ -1,13 +1,8 @@
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path().resolve().parent / "src"))
-
-from bandits.base import BanditPolicy
-from bandits.baseline import FixedArmPolicy, RandomPolicy
-from bandits.thompson import ThompsonSamplingPolicy
-from bandits.ucb import UCB1Policy
-from bandits.epsilon_greedy import EpsilonGreedyPolicy
+from .bandits.base import BanditPolicy
+from .bandits.baseline import FixedArmPolicy, RandomPolicy
+from .bandits.thompson import ThompsonSamplingPolicy
+from .bandits.ucb import UCB1Policy
+from .bandits.epsilon_greedy import EpsilonGreedyPolicy
 
 _REGISTRY = {
     "fixed_arm": FixedArmPolicy,

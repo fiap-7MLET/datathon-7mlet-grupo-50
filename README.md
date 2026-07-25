@@ -1,11 +1,114 @@
 # datathon-7mlet-grupo-50
 Datathon 7MLET
 
-Visão do Problema: plataforma de experimentação adaptativa para ofertas bancárias usando multi-armed bandit, com assistente LLM via RAG
+Visão do Problema: plataforma de experimentação adaptativa para ofertas bancárias usando multi-armed bandit.
 
-Escopo e escolhas de design: quais algoritmos foram escolhidos e por quê, qual dataset Kaggle foi usado, qual framework de API foi escolhido (ex: FastAPI), qual ferramenta de rastreamento (MLflow).
+Uma instituição financeira digital precisa decidir, em cada canal, qual oferta apresentar a
+cada cliente elegível. Regras fixas e testes A/B longos desperdiçam tráfego e demoram a
+reagir. A abordagem adaptativa (multi-armed bandit) equilibra exploração e explotação e
+aprende com as respostas observadas.
 
-Mapa de pastas — a árvore de diretórios comentada, explicando o que cada pasta contém.
+**Base Kaggle:** [Bank Marketing](https://www.kaggle.com/code/henriqueyamahata/bank-marketing-classification-roc-f1-recall)
+(origem UCI). A coluna `duration` é descartada por vazamento temporal. Detalhes em
+[`data/kaggle/README.md`](data/kaggle/README.md) e [`docs/data_dictionary.md`](docs/data_dictionary.md).
+
+## Instruções de execução local
+
+```bash
+uv sync --extra dev              # dependências
+
+uv run datathon-train            # Etapa 3 + 7: treina as políticas e registra no MLflow
+uv run datathon-serve            # Etapa 5: sobe a API em http://127.0.0.1:8000
+uv run mlflow ui                 # inspeciona parâmetros e métricas dos experimentos
+uv run pytest                    # testes
+```
+
+`datathon-train` precisa de `data/processed/bank_marketing_processed.parquet` — gere-o antes
+com `uv run python -m datathon.data_loader` (requer o CSV do Kaggle em `data/kaggle/`).
+
+### Exemplo de chamada
+
+```bash
+curl -X POST "http://127.0.0.1:8000/recommend?seed=42" \
+  -H "Content-Type: application/json" \
+  -d '{"age": 35, "job": "student", "contact": "cellular", "month": "mar",
+       "education": "university.degree", "housing": "no", "loan": "no",
+       "default": "no", "poutcome": "success", "previous": 2}'
+```
+
+```json
+{
+  "arm_id": "arm_005",
+  "arm_name": "CDB liquidez diária",
+  "channel": ["app", "push"],
+  "score": 0.4172,
+  "algorithm": "thompson_sampling",
+  "contextual": false
+}
+```
+
+Documentação interativa em `http://127.0.0.1:8000/docs`. `GET /health` mostra qual política
+está sendo servida e se ela veio do MLflow ou do arquivo local.
+
+O parâmetro `seed` é opcional: com ele a resposta é reproduzível — use-o na demo e em
+qualquer conjunto de casos de teste que precise dar sempre o mesmo resultado
+([ADR 0002](docs/adr/0002-serve-time-thompson-sampling.md)). Sem ele, cada chamada sorteia
+da distribuição posterior.
+
+Vale saber o que esperar: como a política já viu 20.000 clientes, a crença sobre `arm_005`
+está concentrada e o sorteio quase sempre cai nele. **Isso é a exploração decaindo com a
+evidência acumulada — a propriedade central do Thompson Sampling**, não ausência de
+exploração. Uma política recém-inicializada (Beta(1,1) em todos os braços) alterna bastante
+entre eles; a treinada converge.
+
+## Escolhas de design
+
+| Escolha | Decisão | Porquê |
+| --- | --- | --- |
+| Algoritmo de produção | Thompson Sampling | Sem hiperparâmetro de exploração para calibrar; a exploração decai sozinha com a evidência acumulada. Foi o melhor no comparativo abaixo. |
+| Baseline | Braço fixo de maior `base_conversion_rate` + escolha aleatória | É a decisão que um time de marketing tomaria olhando só a ficha técnica da oferta; o aleatório é o piso. |
+| Contexto | **Não-contextual** | Ver [ADR 0001](docs/adr/0001-non-contextual-production-policy.md). |
+| API | FastAPI | Validação por schema (Pydantic) e documentação OpenAPI automática. |
+| Rastreamento | MLflow local | Ferramenta do curso; registra parâmetros, métricas e o artefato da política. |
+
+### Resultado (20.000 clientes simulados)
+
+| Estratégia | Conversão | Uplift vs baseline fixo |
+| --- | --- | --- |
+| **Thompson Sampling** | **0.4128** | **+24.5%** |
+| UCB1 | 0.3922 | +18.2% |
+| Epsilon-Greedy (0.10) | 0.3913 | +18.0% |
+| Baseline fixo | 0.3317 | — |
+| Baseline aleatório | 0.1850 | −44.2% |
+
+Os três algoritmos adaptativos convergem para o mesmo braço (`arm_005`), e todos superam o
+baseline. Reproduza com `uv run datathon-train`.
+
+Estes números vêm da re-execução do ambiente da Etapa 3 pelas classes de política que a API
+serve (`uv run datathon-train`), e é essa execução que fica registrada no MLflow. Diferem na
+terceira casa dos do notebook 03 porque o notebook sorteia com `numpy.random` e as classes
+usam `random.Random` — mesma conclusão, gerador diferente.
+
+> **Ressalva de honestidade:** a política de produção é não-contextual. A API recebe e
+> registra os dados do cliente (exigência da Etapa 5), mas eles **não** alteram a oferta
+> escolhida — a recomendação vem da crença populacional. Dois clientes diferentes podem
+> receber a mesma oferta. O contexto entra no *ambiente de recompensa* da simulação, via os
+> `segment_multipliers` do catálogo, não na política. Ver [ADR 0001](docs/adr/0001-non-contextual-production-policy.md).
+
+## Mapa de pastas
+
+```
+src/datathon/
+├── bandits/            # políticas: base (interface), thompson, ucb, epsilon_greedy, baseline
+├── training/           # ambiente de simulação + treino com rastreamento MLflow (Etapas 3 e 7)
+├── api/                # serviço FastAPI: recommender (domínio), policy_store (carga), main (HTTP)
+├── data_loader.py      # limpeza do dataset Kaggle (Etapa 2)
+└── simulator.py        # geração dos eventos sintéticos de oferta/recompensa
+notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos
+data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
+docs/adr/               # decisões de arquitetura
+CONTEXT.md              # glossário do domínio
+```
 
 ## Etapa 6 — Arquitetura-alvo em nuvem (AWS)
 
