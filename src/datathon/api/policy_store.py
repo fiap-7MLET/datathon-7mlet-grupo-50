@@ -20,6 +20,7 @@ from typing import Any, Dict, Tuple
 from ..policy_artifact import (
     CATALOG_PATH,
     EXPERIMENT_NAME,
+    LEARNING_POLICY_PATH,
     LOCAL_POLICY_PATH,
     POLICY_ARTIFACT_PATH,
     POLICY_STATE_FILENAME,
@@ -46,6 +47,23 @@ def load_policy_state() -> Tuple[Dict[str, Any], str]:
 
     logger.warning("MLflow indisponível; carregando política local de %s", LOCAL_POLICY_PATH)
     return _from_local_file(), f"local:{LOCAL_POLICY_PATH.name}"
+
+
+def load_learning_policy_state() -> Dict[str, Any] | None:
+    """
+    Snapshot de horizonte curto usado só pela demo, ou `None` se ele não foi gerado.
+
+    Deliberadamente opcional e só local: não é candidato a produção, não vem do MLflow, e a
+    API tem de subir normalmente sem ele. Quem quiser o contraste na apresentação roda
+    `uv run datathon-evaluate --write-golden`.
+    """
+    if not LEARNING_POLICY_PATH.exists():
+        logger.info(
+            "Snapshot em aprendizado ausente (%s); a demo mostrará só a política publicada.",
+            LEARNING_POLICY_PATH.name,
+        )
+        return None
+    return json.loads(LEARNING_POLICY_PATH.read_text(encoding="utf-8"))
 
 
 def _from_mlflow() -> Dict[str, Any] | None:

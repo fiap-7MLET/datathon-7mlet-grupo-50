@@ -37,9 +37,11 @@ import mlflow
 import pandas as pd
 
 from ..api.recommender import OfferRecommender
+from ..client_personas import CLIENT_PERSONAS
 from ..policy_artifact import (
     CATALOG_PATH,
     EXPERIMENT_NAME,
+    LEARNING_POLICY_PATH,
     LOCAL_POLICY_PATH,
     PROJECT_ROOT,
 )
@@ -204,108 +206,11 @@ def evaluate(n_clients: int = N_CLIENTS) -> Tuple[List[PolicyMetrics], Dict[str,
 # Golden set
 # ---------------------------------------------------------------------------
 
-GOLDEN_CLIENTS: List[Dict[str, Any]] = [
-    {
-        "case_id": "previous_converter",
-        "descricao": "Já converteu em campanha anterior — segmento de maior conversão real (65,1%).",
-        "seed": 101,
-        "client": {
-            "age": 47,
-            "job": "management",
-            "marital": "married",
-            "education": "university.degree",
-            "default": "no",
-            "housing": "yes",
-            "loan": "no",
-            "contact": "cellular",
-            "month": "may",
-            "day_of_week": "mon",
-            "campaign": 1,
-            "previous": 2,
-            "poutcome": "success",
-        },
-    },
-    {
-        "case_id": "student_digital",
-        "descricao": "Estudante em canal digital, em alta temporada (março).",
-        "seed": 202,
-        "client": {
-            "age": 22,
-            "job": "student",
-            "marital": "single",
-            "education": "university.degree",
-            "default": "no",
-            "housing": "no",
-            "loan": "no",
-            "contact": "cellular",
-            "month": "mar",
-            "day_of_week": "tue",
-            "campaign": 1,
-            "previous": 0,
-            "poutcome": "nonexistent",
-        },
-    },
-    {
-        "case_id": "retired",
-        "descricao": "Aposentado — perfil conservador, conversão real de 17,6%.",
-        "seed": 303,
-        "client": {
-            "age": 68,
-            "job": "retired",
-            "marital": "married",
-            "education": "basic.4y",
-            "default": "no",
-            "housing": "no",
-            "loan": "no",
-            "contact": "telephone",
-            "month": "oct",
-            "day_of_week": "wed",
-            "campaign": 2,
-            "previous": 0,
-            "poutcome": "nonexistent",
-        },
-    },
-    {
-        "case_id": "digital_channel_massa",
-        "descricao": "Cliente típico da maior fatia da base (54% em canal digital).",
-        "seed": 404,
-        "client": {
-            "age": 38,
-            "job": "admin.",
-            "marital": "married",
-            "education": "high.school",
-            "default": "no",
-            "housing": "yes",
-            "loan": "yes",
-            "contact": "cellular",
-            "month": "jul",
-            "day_of_week": "thu",
-            "campaign": 3,
-            "previous": 0,
-            "poutcome": "nonexistent",
-        },
-    },
-    {
-        "case_id": "low_engagement",
-        "descricao": "Nunca contactado antes — o caso mais frio, conversão real de 3,7%.",
-        "seed": 505,
-        "client": {
-            "age": 31,
-            "job": "blue-collar",
-            "marital": "single",
-            "education": "basic.9y",
-            "default": "unknown",
-            "housing": "no",
-            "loan": "no",
-            "contact": "telephone",
-            "month": "jun",
-            "day_of_week": "fri",
-            "campaign": 1,
-            "previous": 0,
-            "poutcome": "nonexistent",
-        },
-    },
-]
+GOLDEN_CLIENTS = CLIENT_PERSONAS
+"""
+Os cinco casos golden são as personas de `datathon.client_personas` — as mesmas que a
+página de demo oferece. Alias mantido porque "golden" é o vocabulário da Etapa 4.
+"""
 
 FINGERPRINT_FIELDS = frozenset({"arm_ids", "alpha", "beta", "counts", "values", "arm_id"})
 """
@@ -447,6 +352,10 @@ def main() -> None:
         _write_golden(GOLDEN_SET_PATH, build_golden_set(published, catalog))
 
         snapshot = train_snapshot_policy(catalog)
+        LEARNING_POLICY_PATH.write_text(
+            json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        logger.info("Snapshot em aprendizado publicado em %s (a demo o consome).", LEARNING_POLICY_PATH)
         _write_golden(
             LEARNING_GOLDEN_PATH,
             build_golden_set(

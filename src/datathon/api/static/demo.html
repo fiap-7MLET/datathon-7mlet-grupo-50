@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plataforma de Ofertas Adaptativas — demo</title>
+<!--
+  Página de apresentação da Etapa 8, servida por GET /demo.
+
+  Sem dependências externas de propósito: a apresentação pode acontecer numa sala sem
+  internet, e uma CDN fora do ar não pode derrubar a demo. Tudo o que ela mostra vem da
+  própria API (/personas, /policy, /recommend) — nada de dado embutido, para que a tela
+  nunca discorde do que o serviço realmente responde.
+-->
+<style>
+  :root {
+    --bg: #0f1117; --card: #171a23; --line: #262b38; --ink: #e7e9ee;
+    --dim: #9aa3b2; --accent: #6ea8fe; --good: #4ade80; --warm: #fbbf24;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7f9; --card:#fff; --line:#e3e6ec; --ink:#1a1d24; --dim:#5b6472; --accent:#2563eb; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem 4rem; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { color: var(--dim); margin: 0 0 1.5rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; }
+  label { display: block; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin-bottom: .3rem; }
+  select, input {
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: .5rem .6rem; font: inherit; min-width: 6rem;
+  }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: .55rem 1.1rem; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-weight: 400; }
+  button:disabled { opacity: .5; cursor: default; }
+  .persona-desc { color: var(--dim); font-size: .9rem; margin-top: .75rem; }
+  .offer { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; }
+  .offer-name { font-size: 1.6rem; font-weight: 650; }
+  .pill { border: 1px solid var(--line); border-radius: 999px; padding: .15rem .7rem; font-size: .82rem; color: var(--dim); }
+  .belief { color: var(--good); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); font-weight: 500; padding-bottom: .5rem; }
+  td { padding: .3rem 0; border-top: 1px solid var(--line); }
+  td.num { text-align: right; white-space: nowrap; padding-left: .75rem; }
+  .bar { height: 9px; border-radius: 5px; background: var(--accent); min-width: 2px; }
+  tr.chosen td { color: var(--ink); font-weight: 600; }
+  tr.chosen .bar { background: var(--good); }
+  .muted { color: var(--dim); }
+  .note { border-left: 3px solid var(--warm); padding-left: .85rem; color: var(--dim); font-size: .9rem; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .85rem; overflow-x: auto; font-size: .85rem; margin: 0; }
+  .err { color: #f87171; }
+  h2 { font-size: .95rem; margin: 0 0 .9rem; }
+  footer { color: var(--dim); font-size: .85rem; text-align: center; margin-top: 1.5rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Plataforma de Ofertas Adaptativas</h1>
+  <p class="sub">Multi-armed bandit (Thompson Sampling) decidindo qual oferta apresentar. Datathon 7MLET — grupo 50.</p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="persona">Cliente</label>
+        <select id="persona"></select>
+      </div>
+      <div>
+        <label for="seed">Seed</label>
+        <input id="seed" type="number" style="width:7rem">
+      </div>
+      <div>
+        <label for="policy">Crença</label>
+        <select id="policy"></select>
+      </div>
+      <button id="go">Recomendar</button>
+      <button id="explore" class="ghost" title="Chama sem seed 20 vezes e conta as ofertas">Explorar 20×</button>
+    </div>
+    <p class="persona-desc" id="persona-desc"></p>
+  </div>
+
+  <div class="card" id="result-card" hidden>
+    <h2>Oferta recomendada</h2>
+    <div class="offer">
+      <span class="offer-name" id="offer-name"></span>
+      <span class="pill" id="offer-channel"></span>
+      <span class="pill" id="offer-id"></span>
+    </div>
+    <p class="muted" style="margin:.6rem 0 0">
+      crença na conversão: <span class="belief" id="offer-score"></span>
+      <span id="offer-policy"></span>
+    </p>
+    <p id="explore-out" class="muted" style="margin:.6rem 0 0"></p>
+  </div>
+
+  <div class="card" id="policy-card" hidden>
+    <h2>Por que essa oferta — a crença sobre cada braço</h2>
+    <table>
+      <thead><tr><th>oferta</th><th style="width:38%"></th><th class="num">crença</th><th class="num">evidência</th></tr></thead>
+      <tbody id="arms"></tbody>
+    </table>
+    <p class="note" id="policy-note" style="margin-top:1rem"></p>
+  </div>
+
+  <div class="card">
+    <h2>Resposta crua da API <span class="muted" style="font-weight:400">— <code id="curl-url"></code></span></h2>
+    <pre id="raw" class="muted">—</pre>
+  </div>
+
+  <footer>
+    <a href="/docs">Swagger /docs</a> · <a href="/health">/health</a> · <a href="/policy">/policy</a>
+  </footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (v) => v == null ? "—" : (100 * v).toFixed(1).replace(".", ",") + "%";
+const obs = (v) => v == null ? "—" : Math.round(v).toLocaleString("pt-BR");
+
+let personas = [];
+let lastRecommendation = null;
+
+const POLICY_LABELS = {
+  publicada: "publicada (20.000 clientes)",
+  em_aprendizado: "em aprendizado (500 clientes)",
+};
+
+async function api(path) {
+  const response = await fetch(path, arguments[1]);
+  if (!response.ok) throw new Error(`${response.status} — ${(await response.json()).detail ?? path}`);
+  return response.json();
+}
+
+function fail(err) {
+  $("raw").textContent = err.message;
+  $("raw").classList.add("err");
+}
+
+async function boot() {
+  try {
+    personas = await api("/personas");
+    $("persona").innerHTML = personas
+      .map((p, i) => `<option value="${i}">${p.case_id}</option>`).join("");
+
+    const health = await api("/health");
+    $("policy").innerHTML = health.policies_available
+      .map((p) => `<option value="${p}">${POLICY_LABELS[p] ?? p}</option>`).join("");
+
+    syncPersona();
+    await recommend();
+  } catch (err) { fail(err); }
+}
+
+function syncPersona() {
+  const persona = personas[$("persona").value];
+  $("seed").value = persona.seed;
+  $("persona-desc").textContent = persona.descricao;
+}
+
+async function recommend(useSeed = true) {
+  const persona = personas[$("persona").value];
+  const policy = $("policy").value;
+  const query = new URLSearchParams({ policy });
+  if (useSeed && $("seed").value !== "") query.set("seed", $("seed").value);
+
+  const url = `/recommend?${query}`;
+  const result = await api(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(persona.client),
+  });
+
+  lastRecommendation = result;
+  $("curl-url").textContent = `POST ${url}`;
+  $("raw").textContent = JSON.stringify(result, null, 2);
+  $("raw").classList.remove("err");
+
+  $("offer-name").textContent = result.arm_name;
+  $("offer-channel").textContent = [].concat(result.channel ?? "sem canal (controle)").join(" + ");
+  $("offer-id").textContent = result.arm_id;
+  $("offer-score").textContent = pct(result.score);
+  $("offer-policy").textContent = ` · crença ${POLICY_LABELS[result.policy] ?? result.policy}`;
+  $("result-card").hidden = false;
+  $("explore-out").textContent = "";
+
+  await renderPolicy(policy, result.arm_id);
+  return result;
+}
+
+async function renderPolicy(policy, chosenArm) {
+  const state = await api(`/policy?policy=${policy}`);
+  const max = Math.max(...state.arms.map((a) => a.belief ?? 0), 0.0001);
+
+  $("arms").innerHTML = state.arms.map((arm) => `
+    <tr class="${arm.arm_id === chosenArm ? "chosen" : ""}">
+      <td>${arm.arm_name} <span class="muted">${arm.arm_id}</span></td>
+      <td><div class="bar" style="width:${(100 * (arm.belief ?? 0) / max).toFixed(1)}%"></div></td>
+      <td class="num">${pct(arm.belief)}</td>
+      <td class="num muted">${obs(arm.observations)}</td>
+    </tr>`).join("");
+
+  const total = state.arms.reduce((sum, a) => sum + (a.observations ?? 0), 0);
+  const top = state.arms[0];
+  const concentration = total ? (top.observations ?? 0) / total : 0;
+
+  $("policy-note").textContent = concentration > 0.8
+    ? `Treinada em ${obs(state.trained_on_n_clients)} clientes: ${pct(concentration)} de toda a `
+      + `evidência está em ${top.arm_id}. A política já decidiu — por isso clientes diferentes `
+      + `recebem a mesma oferta. Isso é a exploração decaindo com a evidência, não falta de exploração.`
+    : `Treinada em ${obs(state.trained_on_n_clients)} clientes: a evidência ainda está espalhada `
+      + `entre os braços, então a política continua testando alternativas. Compare com a crença `
+      + `publicada para ver o mesmo algoritmo depois de aprender.`;
+
+  $("policy-card").hidden = false;
+}
+
+async function explore() {
+  $("explore").disabled = true;
+  try {
+    const counts = {};
+    for (let i = 0; i < 20; i++) {
+      const result = await recommend(false);
+      counts[result.arm_id] = (counts[result.arm_id] ?? 0) + 1;
+    }
+    const summary = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([arm, n]) => `${arm}: ${n}`).join(" · ");
+    $("explore-out").textContent = `20 chamadas sem seed → ${summary}`;
+  } catch (err) { fail(err); } finally { $("explore").disabled = false; }
+}
+
+$("persona").addEventListener("change", () => { syncPersona(); recommend().catch(fail); });
+$("policy").addEventListener("change", () => recommend().catch(fail));
+$("go").addEventListener("click", () => recommend().catch(fail));
+$("explore").addEventListener("click", explore);
+boot();
+</script>
+</body>
+</html>

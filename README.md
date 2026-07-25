@@ -51,6 +51,21 @@ curl -X POST "http://127.0.0.1:8000/recommend?seed=42" \
 Documentação interativa em `http://127.0.0.1:8000/docs`. `GET /health` mostra qual política
 está sendo servida e se ela veio do MLflow ou do arquivo local.
 
+### Página de demonstração — `/demo`
+
+`http://127.0.0.1:8000/demo` é uma página de apresentação servida pela própria API: os cinco
+clientes da Etapa 4 como opções prontas, a oferta recomendada em linguagem de negócio, e a
+crença da política sobre **cada** braço em barras — com quanta evidência sustenta cada uma.
+O seletor de crença alterna entre a política publicada e o snapshot de 500 clientes, o que
+mostra o mesmo algoritmo antes e depois de a exploração decair. O botão *Explorar 20×* chama
+a API sem `seed` e conta as ofertas sorteadas.
+
+Sem dependências externas: nada de CDN, tudo inline — a apresentação funciona offline. Para
+o seletor de crença funcionar, gere o snapshot antes com
+`uv run datathon-evaluate --write-golden`.
+
+`GET /policy` expõe os mesmos dados em JSON, para quem quiser auditar a decisão sem a página.
+
 O parâmetro `seed` é opcional: com ele a resposta é reproduzível — use-o na demo e em
 qualquer conjunto de casos de teste que precise dar sempre o mesmo resultado
 ([ADR 0002](docs/adr/0002-serve-time-thompson-sampling.md)). Sem ele, cada chamada sorteia
@@ -124,6 +139,8 @@ src/datathon/
 ├── training/           # ambiente de simulação + treino com rastreamento MLflow (Etapas 3 e 7)
 ├── evaluation/         # métricas comparativas + golden set (Etapa 4)
 ├── api/                # serviço FastAPI: recommender (domínio), policy_store (carga), main (HTTP)
+│   └── static/demo.html    # página de apresentação servida em /demo (Etapa 8)
+├── client_personas.py  # os 5 clientes fixos, compartilhados pelo golden set e pela demo
 ├── data_loader.py      # limpeza do dataset Kaggle (Etapa 2)
 └── simulator.py        # geração dos eventos sintéticos de oferta/recompensa
 notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos

@@ -15,6 +15,24 @@ from .. import load_policy
 
 
 @dataclass(frozen=True)
+class ArmBelief:
+    """O que a política acredita sobre um braço, e sobre quanta evidência."""
+
+    arm_id: str
+    arm_name: str
+    belief: float | None
+    """Média posterior da taxa de conversão. `None` se a política não mantém uma."""
+    observations: float | None
+    """
+    Quantas rodadas de evidência sustentam essa crença.
+
+    É o número que explica a demo: um braço com 18.000 observações e outro com 20 podem ter
+    médias parecidas, mas a política tem confiança muito diferente nas duas — e é daí que
+    vem a decisão de parar (ou não) de explorar.
+    """
+
+
+@dataclass(frozen=True)
 class Recommendation:
     """Oferta recomendada para uma chamada, com a crença atual sobre ela."""
 
@@ -50,7 +68,40 @@ class OfferRecommender:
             score=self._belief_in(arm_id),
         )
 
+    def beliefs(self) -> list[ArmBelief]:
+        """
+        A crença atual sobre todos os braços, do mais promissor ao menos, com a evidência
+        que a sustenta.
+
+        É o que torna a decisão auditável: em vez de "a API respondeu arm_005", dá para
+        mostrar *por que* — e mostrar que os braços preteridos foram avaliados, não
+        ignorados. Consumido pelo `GET /policy` e pela página de demo.
+        """
+        beliefs = [
+            ArmBelief(
+                arm_id=arm_id,
+                arm_name=self._arms[arm_id]["name"],
+                belief=self._belief_in(arm_id),
+                observations=self._observations_for(arm_id),
+            )
+            for arm_id in self._policy.arm_ids
+        ]
+        return sorted(beliefs, key=lambda b: (b.belief is not None, b.belief), reverse=True)
+
     def _belief_in(self, arm_id: str) -> float | None:
         """Média posterior do braço, quando a política mantém uma (ex: Thompson Sampling)."""
         posterior_mean = getattr(self._policy, "posterior_mean", None)
         return posterior_mean(arm_id) if posterior_mean else None
+
+    def _observations_for(self, arm_id: str) -> float | None:
+        """
+        Rodadas observadas no braço, descontando o prior.
+
+        Beta(1,1) é a crença inicial *sem* nenhuma evidência: alpha+beta começa em 2 e cada
+        rodada soma 1. Por isso o −2 — sem ele, uma política recém-criada alegaria duas
+        observações que nunca aconteceram.
+        """
+        alpha, beta = getattr(self._policy, "alpha", None), getattr(self._policy, "beta", None)
+        if alpha is None or beta is None:
+            return None
+        return alpha[arm_id] + beta[arm_id] - 2.0
