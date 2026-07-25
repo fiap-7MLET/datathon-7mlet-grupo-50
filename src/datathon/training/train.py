@@ -3,7 +3,7 @@ Etapa 7 — treino das políticas com rastreamento de experimentos no MLflow.
 
 Roda o baseline e os algoritmos adaptativos no mesmo ambiente de simulação, registra
 parâmetros e métricas no MLflow, e publica o estado da política de produção (Thompson
-Sampling — ADR 0001) como artefato. É esse artefato que a API carrega no startup.
+Sampling — ver README) como artefato. É esse artefato que a API carrega no startup.
 
 Uso:
     uv run datathon-train

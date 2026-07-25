@@ -3,7 +3,7 @@
   "policy_fingerprint": "f4cdbcd0bde7896f",
   "catalog_version": "1.0.0",
   "contextual": false,
-  "nota": "Snapshot da mesma política com apenas 500 clientes de treino, quando a exploração ainda está ativa. Contraste com `golden_set.json` (20.000 clientes), onde o posterior já convergiu para um único braço. A política continua não-contextual (ADR 0001): o que varia entre os casos é a seed.",
+  "nota": "Snapshot da mesma política com apenas 500 clientes de treino, quando a exploração ainda está ativa. Contraste com `golden_set.json` (20.000 clientes), onde o posterior já convergiu para um único braço. A política continua não-contextual (ver README, “Escolhas de design”): o que varia entre os casos é a seed.",
   "cases": [
     {
       "case_id": "previous_converter",

@@ -49,7 +49,7 @@ def test_recommend_returns_an_offer_for_a_client(client):
 
 
 def test_the_same_seed_always_returns_the_same_offer(client):
-    """O contrato que a demo e o golden set dependem (ADR 0002)."""
+    """O contrato que a demo e o golden set dependem (ver README, “Reprodutibilidade”)."""
     offers = {
         client.post("/recommend?seed=7", json=CLIENT_PAYLOAD).json()["arm_id"] for _ in range(5)
     }
@@ -60,7 +60,7 @@ def test_the_same_seed_always_returns_the_same_offer(client):
 def test_the_response_says_the_policy_is_not_contextual(client):
     """
     A API recebe os dados do cliente por exigência da Etapa 5, mas não os usa para decidir.
-    O campo é o que impede que a demo prometa personalização (ADR 0001).
+    O campo é o que impede que a demo prometa personalização (ver README, “Escolhas de design”).
     """
     body = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()
 

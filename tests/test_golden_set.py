@@ -2,7 +2,7 @@
 Golden sets da Etapa 4 — cinco casos congelados, em dois momentos da vida da política.
 
 O que estes testes protegem: dada uma política e uma seed fixa, a recomendação é sempre a
-mesma. É o contrato de reprodutibilidade do ADR 0002, e é o que permite gravar a demo da
+mesma. É o contrato de reprodutibilidade descrito no README, e é o que permite gravar a demo da
 Etapa 8 sabendo de antemão o que a API vai responder.
 
 São dois arquivos, e o contraste entre eles é o argumento da Etapa 4:
@@ -150,7 +150,7 @@ def test_golden_recommendations_carry_valid_catalog_offers(any_golden, catalog):
 def test_golden_set_states_that_the_policy_is_not_contextual(any_golden):
     """
     Documental, e de propósito: o arquivo será lido por gente do time e pela banca. Se os
-    cinco casos vierem com a mesma oferta, tem de estar escrito ali por quê (ADR 0001).
+    cinco casos vierem com a mesma oferta, tem de estar escrito ali por quê (ver README, “Escolhas de design”).
     """
     assert any_golden["contextual"] is False
     assert "seed" in any_golden["nota"]

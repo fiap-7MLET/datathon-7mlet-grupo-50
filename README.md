@@ -66,10 +66,16 @@ o seletor de crença funcionar, gere o snapshot antes com
 
 `GET /policy` expõe os mesmos dados em JSON, para quem quiser auditar a decisão sem a página.
 
-O parâmetro `seed` é opcional: com ele a resposta é reproduzível — use-o na demo e em
-qualquer conjunto de casos de teste que precise dar sempre o mesmo resultado
-([ADR 0002](docs/adr/0002-serve-time-thompson-sampling.md)). Sem ele, cada chamada sorteia
-da distribuição posterior.
+### Reprodutibilidade — o parâmetro `seed`
+
+Thompson Sampling decide sorteando da distribuição posterior de cada braço, então duas
+chamadas idênticas podem devolver ofertas diferentes. O parâmetro opcional `seed` fixa esse
+sorteio: com ele a resposta é sempre a mesma, o que torna possível ter casos de teste
+congelados (o golden set da Etapa 4) e ensaiar a demo sabendo o que a API vai responder.
+
+A seed é escolha de quem chama, não parte do que o modelo aprendeu — por isso ela não é
+serializada no estado da política. Sem `seed`, cada chamada sorteia de novo, que é o
+comportamento de produção.
 
 Vale saber o que esperar: como a política já viu 20.000 clientes, a crença sobre `arm_005`
 está concentrada e o sorteio quase sempre cai nele. **Isso é a exploração decaindo com a
@@ -83,7 +89,7 @@ entre eles; a treinada converge.
 | --- | --- | --- |
 | Algoritmo de produção | Thompson Sampling | Sem hiperparâmetro de exploração para calibrar; a exploração decai sozinha com a evidência acumulada. Foi o melhor no comparativo abaixo. |
 | Baseline | Braço fixo de maior `base_conversion_rate` + escolha aleatória | É a decisão que um time de marketing tomaria olhando só a ficha técnica da oferta; o aleatório é o piso. |
-| Contexto | **Não-contextual** | Ver [ADR 0001](docs/adr/0001-non-contextual-production-policy.md). |
+| Contexto | **Não-contextual** | Um posterior Beta(α, β) por braço, agregado sobre a população. A alternativa — posteriors por (braço × segmento) — multiplicaria 9 braços por 10 segmentos sobrepostos, deixando cada célula esparsa; e a Etapa 3 mostrou os três algoritmos adaptativos convergindo para o **mesmo** braço na população, ou seja, o ganho contextual não se manifestou neste ambiente. |
 | API | FastAPI | Validação por schema (Pydantic) e documentação OpenAPI automática. |
 | Rastreamento | MLflow local | Ferramenta do curso; registra parâmetros, métricas e o artefato da política. |
 
@@ -109,7 +115,7 @@ usam `random.Random` — mesma conclusão, gerador diferente.
 
 `uv run datathon-evaluate` refaz a comparação acima medindo, além da conversão e do uplift,
 a **convergência**: para qual braço cada política migrou na segunda metade do horizonte e
-com que concentração. Saída em [`reports/etapa4_avaliacao.md`](reports/etapa4_avaliacao.md)
+com que concentração. Saída em `reports/etapa4_avaliacao.md` (gerado localmente, fora do versionamento)
 e num run MLflow (`avaliacao-etapa4`). Como todas as políticas enfrentam a mesma matriz de
 desfechos (*common random numbers*), a diferença entre elas é decisão, não sorte.
 
@@ -129,7 +135,9 @@ retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --
 > registra os dados do cliente (exigência da Etapa 5), mas eles **não** alteram a oferta
 > escolhida — a recomendação vem da crença populacional. Dois clientes diferentes podem
 > receber a mesma oferta. O contexto entra no *ambiente de recompensa* da simulação, via os
-> `segment_multipliers` do catálogo, não na política. Ver [ADR 0001](docs/adr/0001-non-contextual-production-policy.md).
+> `segment_multipliers` do catálogo, não na política. Uma versão contextual continua sendo a
+> evolução natural: `BanditPolicy.select_arm()` já recebe `context`, e uma política nova pode
+> ser registrada sem quebrar a existente.
 
 ## Mapa de pastas
 
@@ -146,9 +154,7 @@ src/datathon/
 notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos
 data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
 tests/golden/           # os 5 casos congelados da Etapa 4
-reports/                # relatório de avaliação gerado por datathon-evaluate
-docs/adr/               # decisões de arquitetura
-CONTEXT.md              # glossário do domínio
+reports/                # relatório de avaliação gerado por datathon-evaluate (fora do git)
 ```
 
 ## Etapa 6 — Arquitetura-alvo em nuvem (AWS)

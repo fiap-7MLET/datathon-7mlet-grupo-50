@@ -7,7 +7,7 @@ o código que a API serve, e não uma segunda implementação paralela.
 
 O modelo de recompensa vem do catálogo: `base_conversion_rate` do braço multiplicado pelos
 `segment_multipliers` de cada segmento que o cliente ativa. Note que os segmentos entram no
-*ambiente* (a recompensa), não na *política* — ver ADR 0001.
+*ambiente* (a recompensa), não na *política* — ver README, “Escolhas de design”.
 """
 
 from __future__ import annotations

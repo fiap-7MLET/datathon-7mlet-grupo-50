@@ -5,11 +5,11 @@ Vivem aqui, e não dentro de um dos dois, porque os dois precisam exatamente dos
 perfis: o golden set congela a recomendação de cada um, e a página de demo os oferece como
 botões. Se divergissem, a demo mostraria um caso que nenhum teste protege.
 
-Cada persona traz uma `seed`. Com ela a recomendação é reproduzível (ADR 0002) — é o que
+Cada persona traz uma `seed`. Com ela a recomendação é reproduzível (ver README, “Reprodutibilidade”) — é o que
 permite ensaiar a apresentação sabendo o que a API vai responder.
 
 Ressalva que precisa acompanhar estes dados onde quer que apareçam: a política é
-**não-contextual** (ADR 0001). Os perfis descrevem a variedade da base e alimentam o log da
+**não-contextual** (ver README, “Escolhas de design”). Os perfis descrevem a variedade da base e alimentam o log da
 API, mas não alteram a oferta escolhida. O que distingue as respostas é a seed.
 """
 

@@ -3,7 +3,7 @@
   "policy_fingerprint": "f8b9f980cc8d20e3",
   "catalog_version": "1.0.0",
   "contextual": false,
-  "nota": "Política não-contextual (ADR 0001): o que distingue os casos é a seed, não o perfil do cliente. Regravar com `uv run datathon-evaluate --write-golden` sempre que a política for retreinada.",
+  "nota": "Política não-contextual (ver README, “Escolhas de design”): o que distingue os casos é a seed, não o perfil do cliente. Regravar com `uv run datathon-evaluate --write-golden` sempre que a política for retreinada.",
   "cases": [
     {
       "case_id": "previous_converter",

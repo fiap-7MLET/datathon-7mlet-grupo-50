@@ -251,6 +251,10 @@ mlflow.db
 reports/
 
 # Material de trabalho e estudo individual — não faz parte da entrega do grupo
+# As decisões que importam estão consolidadas no README, como a spec do datathon pede;
+# CONTEXT.md e as ADRs continuam no disco como material de consulta pessoal.
+CONTEXT.md
+docs/adr/
 HANDOFF.md
 MISSION.md
 NOTES.md

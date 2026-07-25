@@ -5,7 +5,7 @@ Recebe os dados de um cliente e devolve a oferta recomendada pela política trei
 Etapa 3 e registrada no MLflow na Etapa 7.
 
 Uma ressalva importante e deliberada: a política de produção é **não-contextual**
-(ADR 0001). Os dados do cliente são validados e registrados no log, mas **não** alteram a
+(ver README, “Escolhas de design”). Os dados do cliente são validados e registrados no log, mas **não** alteram a
 escolha do braço — a recomendação vem da crença populacional aprendida na simulação. Dois
 clientes diferentes podem receber a mesma oferta, e isso é o comportamento esperado.
 
@@ -88,7 +88,7 @@ class RecommendationResponse(BaseModel):
     contextual: Literal[False] = Field(
         default=False,
         description=(
-            "A política de produção é não-contextual (ADR 0001): os dados do cliente são "
+            "A política de produção é não-contextual (ver README, “Escolhas de design”): os dados do cliente são "
             "registrados mas não influenciam a escolha do braço."
         ),
     )
@@ -258,7 +258,7 @@ def recommend(
     seed: Optional[int] = Query(
         default=None,
         description=(
-            "Fixa o sorteio Thompson, tornando a resposta reproduzível (ADR 0002). "
+            "Fixa o sorteio Thompson, tornando a resposta reproduzível (ver README, “Reprodutibilidade”). "
             "Sem seed, a política explora e chamadas sucessivas podem variar."
         ),
     ),

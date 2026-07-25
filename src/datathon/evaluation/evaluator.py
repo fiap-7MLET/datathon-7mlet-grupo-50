@@ -14,7 +14,7 @@ adaptativa é melhor, e o que exatamente ela faz?") — uma no agregado, outra c
    `tests/golden/golden_set.json` e verificada por teste. É regressão do contrato de
    serving e roteiro para a demo da Etapa 8.
 
-Ressalva que precisa ficar visível: a política de produção é **não-contextual** (ADR 0001).
+Ressalva que precisa ficar visível: a política de produção é **não-contextual** (ver README, “Escolhas de design”).
 No golden set, o que faz dois casos receberem ofertas diferentes é a **seed**, não o perfil
 do cliente. Os cinco perfis existem para mostrar a variedade da base, não para sugerir uma
 personalização que o modelo não entrega.
@@ -238,7 +238,7 @@ def policy_fingerprint(policy_state: Dict[str, Any]) -> str:
 
 
 DEFAULT_NOTE = (
-    "Política não-contextual (ADR 0001): o que distingue os casos é a seed, não o perfil "
+    "Política não-contextual (ver README, “Escolhas de design”): o que distingue os casos é a seed, não o perfil "
     "do cliente. Regravar com `uv run datathon-evaluate --write-golden` sempre que a "
     "política for retreinada."
 )
@@ -365,7 +365,7 @@ def main() -> None:
                     f"Snapshot da mesma política com apenas {LEARNING_HORIZON} clientes de "
                     "treino, quando a exploração ainda está ativa. Contraste com "
                     "`golden_set.json` (20.000 clientes), onde o posterior já convergiu para "
-                    "um único braço. A política continua não-contextual (ADR 0001): o que "
+                    "um único braço. A política continua não-contextual (ver README, “Escolhas de design”): o que "
                     "varia entre os casos é a seed."
                 ),
                 embed_policy_state=True,
