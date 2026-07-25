@@ -240,8 +240,29 @@ data/processed/*.parquet
 # MLflow local
 mlruns/
 mlartifacts/
+mlflow.db
 
 # IDEs
 .vscode/
 .idea/
 *.DS_Store
+
+# Relatórios gerados (uv run datathon-evaluate)
+reports/
+
+# Material de trabalho e estudo individual — não faz parte da entrega do grupo
+HANDOFF.md
+MISSION.md
+NOTES.md
+RESOURCES.md
+lessons/
+learning-records/
+reference/
+assets/
+
+# Enunciado do datathon (PDF) e lixo do WSL/Windows
+*.pdf
+*:Zone.Identifier
+
+# Documentação do dataset baixada do Kaggle
+data/kaggle/*.txt

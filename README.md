@@ -1,7 +1,7 @@
-# datathon-7mlet-grupo-50
-Datathon 7MLET
+# datathon-7mlet-grupo-50 — Plataforma de Ofertas Adaptativas
 
-Visão do Problema: plataforma de experimentação adaptativa para ofertas bancárias usando multi-armed bandit.
+Datathon 7MLET. **Visão do problema:** experimentação adaptativa para ofertas bancárias
+usando multi-armed bandit.
 
 Uma instituição financeira digital precisa decidir, em cada canal, qual oferta apresentar a
 cada cliente elegível. Regras fixas e testes A/B longos desperdiçam tráfego e demoram a
@@ -18,6 +18,7 @@ aprende com as respostas observadas.
 uv sync --extra dev              # dependências
 
 uv run datathon-train            # Etapa 3 + 7: treina as políticas e registra no MLflow
+uv run datathon-evaluate         # Etapa 4: métricas comparativas + relatório
 uv run datathon-serve            # Etapa 5: sobe a API em http://127.0.0.1:8000
 uv run mlflow ui                 # inspeciona parâmetros e métricas dos experimentos
 uv run pytest                    # testes
@@ -89,6 +90,26 @@ serve (`uv run datathon-train`), e é essa execução que fica registrada no MLf
 terceira casa dos do notebook 03 porque o notebook sorteia com `numpy.random` e as classes
 usam `random.Random` — mesma conclusão, gerador diferente.
 
+### Etapa 4 — avaliação e golden set
+
+`uv run datathon-evaluate` refaz a comparação acima medindo, além da conversão e do uplift,
+a **convergência**: para qual braço cada política migrou na segunda metade do horizonte e
+com que concentração. Saída em [`reports/etapa4_avaliacao.md`](reports/etapa4_avaliacao.md)
+e num run MLflow (`avaliacao-etapa4`). Como todas as políticas enfrentam a mesma matriz de
+desfechos (*common random numbers*), a diferença entre elas é decisão, não sorte.
+
+Os **cinco casos golden** ficam em `tests/golden/`, congelados em dois momentos da vida da
+política — o contraste entre os dois arquivos é o argumento da etapa:
+
+| arquivo | treino | os 5 casos recebem |
+| --- | --- | --- |
+| `golden_set.json` | 20.000 clientes (política publicada) | a **mesma** oferta — a exploração cessou |
+| `golden_set_em_aprendizado.json` | 500 clientes | ofertas **diferentes** — exploração viva |
+
+Cada arquivo guarda a impressão digital dos posteriors que o gerou. Se a política for
+retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --write-golden`
+— mudou o modelo, mudou a recomendação, e o time vê antes de gravar o vídeo.
+
 > **Ressalva de honestidade:** a política de produção é não-contextual. A API recebe e
 > registra os dados do cliente (exigência da Etapa 5), mas eles **não** alteram a oferta
 > escolhida — a recomendação vem da crença populacional. Dois clientes diferentes podem
@@ -101,11 +122,14 @@ usam `random.Random` — mesma conclusão, gerador diferente.
 src/datathon/
 ├── bandits/            # políticas: base (interface), thompson, ucb, epsilon_greedy, baseline
 ├── training/           # ambiente de simulação + treino com rastreamento MLflow (Etapas 3 e 7)
+├── evaluation/         # métricas comparativas + golden set (Etapa 4)
 ├── api/                # serviço FastAPI: recommender (domínio), policy_store (carga), main (HTTP)
 ├── data_loader.py      # limpeza do dataset Kaggle (Etapa 2)
 └── simulator.py        # geração dos eventos sintéticos de oferta/recompensa
 notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos
 data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
+tests/golden/           # os 5 casos congelados da Etapa 4
+reports/                # relatório de avaliação gerado por datathon-evaluate
 docs/adr/               # decisões de arquitetura
 CONTEXT.md              # glossário do domínio
 ```
