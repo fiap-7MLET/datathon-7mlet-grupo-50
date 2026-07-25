@@ -57,6 +57,14 @@
   .note { border-left: 3px solid var(--warm); padding-left: .85rem; color: var(--dim); font-size: .9rem; }
   pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .85rem; overflow-x: auto; font-size: .85rem; margin: 0; }
   .err { color: #f87171; }
+  /* Com seed fixa a resposta é sempre a mesma — sem um sinal de atualização, clicar em
+     "Recomendar" parece não fazer nada. O pulso e o contador de chamadas mostram que a
+     API respondeu, e que a repetição é o comportamento correto. */
+  @keyframes flash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
+  .flash { animation: flash .55s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
+  .callinfo { font-size: .8rem; color: var(--dim); font-variant-numeric: tabular-nums; margin: 0 0 .9rem; }
+  .callinfo b { color: var(--ink); font-weight: 600; }
   h2 { font-size: .95rem; margin: 0 0 .9rem; }
   footer { color: var(--dim); font-size: .85rem; text-align: center; margin-top: 1.5rem; }
   a { color: var(--accent); }
@@ -89,6 +97,7 @@
 
   <div class="card" id="result-card" hidden>
     <h2>Oferta recomendada</h2>
+    <p class="callinfo" id="callinfo"></p>
     <div class="offer">
       <span class="offer-name" id="offer-name"></span>
       <span class="pill" id="offer-channel"></span>
@@ -126,7 +135,15 @@ const pct = (v) => v == null ? "—" : (100 * v).toFixed(1).replace(".", ",") + 
 const obs = (v) => v == null ? "—" : Math.round(v).toLocaleString("pt-BR");
 
 let personas = [];
-let lastRecommendation = null;
+let calls = 0;
+let lastArm = null;
+
+/** Pisca o elemento para sinalizar que ele acabou de ser atualizado. */
+function flash(el) {
+  el.classList.remove("flash");
+  void el.offsetWidth; // força o reinício da animação quando o valor repete
+  el.classList.add("flash");
+}
 
 const POLICY_LABELS = {
   publicada: "publicada (20.000 clientes)",
@@ -178,7 +195,18 @@ async function recommend(useSeed = true) {
     body: JSON.stringify(persona.client),
   });
 
-  lastRecommendation = result;
+  calls += 1;
+  const seeded = query.has("seed");
+  const repeated = result.arm_id === lastArm;
+  lastArm = result.arm_id;
+
+  $("callinfo").innerHTML =
+    `chamada <b>#${calls}</b> · ${new Date().toLocaleTimeString("pt-BR")} · `
+    + (seeded
+        ? `seed <b>${query.get("seed")}</b> — resposta reproduzível`
+        : `<b>sem seed</b> — a política sorteia da posterior`)
+    + (repeated && seeded ? " · mesma oferta de novo, como esperado" : "");
+
   $("curl-url").textContent = `POST ${url}`;
   $("raw").textContent = JSON.stringify(result, null, 2);
   $("raw").classList.remove("err");
@@ -190,6 +218,7 @@ async function recommend(useSeed = true) {
   $("offer-policy").textContent = ` · crença ${POLICY_LABELS[result.policy] ?? result.policy}`;
   $("result-card").hidden = false;
   $("explore-out").textContent = "";
+  flash($("result-card"));
 
   await renderPolicy(policy, result.arm_id);
   return result;
