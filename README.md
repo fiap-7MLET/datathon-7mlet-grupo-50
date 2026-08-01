@@ -1,34 +1,165 @@
 # datathon-7mlet-grupo-50 — Plataforma de Ofertas Adaptativas
 
-Datathon 7MLET. **Visão do problema:** experimentação adaptativa para ofertas bancárias
-usando multi-armed bandit.
+**Visão do problema:** experimentação adaptativa para ofertas bancárias usando multi-armed bandit.
 
 Uma instituição financeira digital precisa decidir, em cada canal, qual oferta apresentar a
 cada cliente elegível. Regras fixas e testes A/B longos desperdiçam tráfego e demoram a
 reagir. A abordagem adaptativa (multi-armed bandit) equilibra exploração e explotação e
 aprende com as respostas observadas.
 
-**Base Kaggle:** [Bank Marketing](https://www.kaggle.com/code/henriqueyamahata/bank-marketing-classification-roc-f1-recall)
-(origem UCI). A coluna `duration` é descartada por vazamento temporal. Detalhes em
+### Dataset - Bank Marketing
+
+* **Nome:** Bank Marketing Dataset
+* **Fonte:** Kaggle
+* **Link:** https://www.kaggle.com/code/henriqueyamahata/bank-marketing-classification-roc-f1-recall
+* **Autor original:** UCI Machine Learning Repository (via Kaggle notebook)
+
+Nota: A coluna `duration` é descartada por vazamento temporal. Detalhes em
 [`data/kaggle/README.md`](data/kaggle/README.md) e [`docs/data_dictionary.md`](docs/data_dictionary.md).
 
-## Instruções de execução local
+### Mapa de pastas do projeto
 
-```bash
-uv sync --extra dev              # dependências
-
-uv run datathon-train            # Etapa 3 + 7: treina as políticas e registra no MLflow
-uv run datathon-evaluate         # Etapa 4: métricas comparativas + relatório
-uv run datathon-serve            # Etapa 5: sobe a API em http://127.0.0.1:8000
-uv run mlflow ui                 # inspeciona parâmetros e métricas dos experimentos
-uv run pytest                    # testes
+```
+src/datathon/
+├── bandits/            # políticas: base (interface), thompson, ucb, epsilon_greedy, baseline
+├── training/           # ambiente de simulação + treino com rastreamento MLflow (Etapas 3 e 7)
+├── evaluation/         # métricas comparativas + golden set (Etapa 4)
+├── api/                # serviço FastAPI: recommender (domínio), policy_store (carga), main (HTTP)
+│   └── static/demo.html    # página de apresentação servida em /demo (Etapa 8)
+├── client_personas.py  # os 5 clientes fixos, compartilhados pelo golden set e pela demo
+├── data_loader.py      # limpeza do dataset Kaggle (Etapa 2)
+└── simulator.py        # geração dos eventos sintéticos de oferta/recompensa
+notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos
+data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
+tests/golden/           # os 5 casos congelados da Etapa 4
+reports/                # relatório de avaliação gerado por datathon-evaluate (fora do git)
 ```
 
-`datathon-train` precisa de `data/processed/bank_marketing_processed.parquet` — gere-o antes
-com `uv run python -m datathon.data_loader` (requer o CSV do Kaggle em `data/kaggle/`).
 
-### Exemplo de chamada
+## 1. Instruções de execução local
 
+As instruções abaixo partem de um ambiente novo e percorrem todo o fluxo: instalação,
+preparação dos dados, treinamento, avaliação, testes, API e MLflow.
+
+### 1.1 Pré-requisitos
+
+- Git.
+- macOS, Linux ou Windows com PowerShell.
+- Acesso à internet para baixar as dependências e a base pública do Kaggle.
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/), responsável por instalar
+  o Python, criar o ambiente virtual e gerenciar as dependências.
+
+Instale o `uv` com:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv --version ## para confirmar
+```
+
+### 1.2. Obter o projeto
+
+```bash
+git clone https://github.com/fiap-7MLET/datathon-7mlet-grupo-50.git
+cd datathon-7mlet-grupo-50
+```
+
+### 1.3. Criar o ambiente virtual
+
+O projeto utiliza Python 3.14, definido no arquivo `.python-version`:
+
+```bash
+uv python install 3.14
+uv sync --extra dev
+uv run python --version
+```
+
+O `uv sync` cria automaticamente o diretório `.venv/` e instala as versões registradas em
+`pyproject.toml` e `uv.lock`. Não é necessário ativar o ambiente, pois todo comando iniciado
+por `uv run` utiliza o `.venv` correto.
+
+### 1.4. Baixar a base Kaggle
+
+Na raiz do projeto, execute:
+
+```bash
+uv run kaggle datasets download \
+  -d henriqueyamahata/bank-marketing \
+  -p data/kaggle \
+  --unzip
+```
+
+O arquivo esperado será criado em:
+
+```text
+data/kaggle/bank-additional-full.csv
+```
+
+### 1.5. Preparar os dados
+
+```bash
+uv run python -m datathon.data_loader
+```
+
+Esse comando trata os dados e cria um arquivo parquet:
+
+```text
+data/processed/bank_marketing_processed.parquet
+```
+
+### 1.6. Treinar as políticas
+
+```bash
+uv run datathon-train
+```
+
+O treinamento compara os baselines com Thompson Sampling, UCB1 e Epsilon-Greedy, registra
+parâmetros e métricas no MLflow e publica a política escolhida em
+`data/processed/policy_state.json`.
+
+### 1.7. Executar a avaliação
+
+```bash
+uv run datathon-evaluate
+```
+
+### 1.8. Executar os testes (Opcional)
+
+```bash
+uv run pytest
+```
+
+### 1.9. Iniciar a API
+
+No primeiro terminal, execute:
+
+```bash
+uv run datathon-serve
+```
+
+Com a aplicação em execução, estarão disponíveis:
+
+- Interface de Demonstração: `http://127.0.0.1:8000/demo`.
+- Documentação Swagger: `http://127.0.0.1:8000/docs`.
+- Status da aplicação: `http://127.0.0.1:8000/health`.
+- Políticas existentes: `http://127.0.0.1:8000/policy`.
+
+### 1.10. Iniciar o MLflow
+
+Mantenha a API no primeiro terminal e abra um segundo terminal na raiz do projeto:
+
+```bash
+uv run mlflow ui
+```
+
+A interface estará disponível em `http://127.0.0.1:5000`. Nela é possível comparar os
+parâmetros, métricas e artefatos registrados pelos comandos de treino e avaliação. Pressione
+`Ctrl+C` para encerrar o MLflow.
+
+## 2. Exemplo de chamada da API
+
+Exemplo de chamada e resposta do endpoint de recomendação.
+
+Request:
 ```bash
 curl -X POST "http://127.0.0.1:8000/recommend?seed=42" \
   -H "Content-Type: application/json" \
@@ -37,6 +168,7 @@ curl -X POST "http://127.0.0.1:8000/recommend?seed=42" \
        "default": "no", "poutcome": "success", "previous": 2}'
 ```
 
+Response esperado:
 ```json
 {
   "arm_id": "arm_005",
@@ -51,7 +183,7 @@ curl -X POST "http://127.0.0.1:8000/recommend?seed=42" \
 Documentação interativa em `http://127.0.0.1:8000/docs`. `GET /health` mostra qual política
 está sendo servida e se ela veio do MLflow ou do arquivo local.
 
-### Página de demonstração — `/demo`
+## 3. Página de demonstração `/demo`
 
 `http://127.0.0.1:8000/demo` é uma página de apresentação servida pela própria API: os cinco
 clientes da Etapa 4 como opções prontas, a oferta recomendada em linguagem de negócio, e a
@@ -66,24 +198,24 @@ o seletor de crença funcionar, gere o snapshot antes com
 
 `GET /policy` expõe os mesmos dados em JSON, para quem quiser auditar a decisão sem a página.
 
-### Reprodutibilidade — o parâmetro `seed`
+### 3.1. Reprodutibilidade - Parâmetro `seed`
 
 Thompson Sampling decide sorteando da distribuição posterior de cada braço, então duas
 chamadas idênticas podem devolver ofertas diferentes. O parâmetro opcional `seed` fixa esse
 sorteio: com ele a resposta é sempre a mesma, o que torna possível ter casos de teste
-congelados (o golden set da Etapa 4) e ensaiar a demo sabendo o que a API vai responder.
+congelados (o golden set da Etapa 4).
 
-A seed é escolha de quem chama, não parte do que o modelo aprendeu — por isso ela não é
-serializada no estado da política. Sem `seed`, cada chamada sorteia de novo, que é o
-comportamento de produção.
+O `seed` não representa uma característica do cliente e não faz parte do aprendizado da
+política. Em produção, a API é chamada sem esse parâmetro, preservando o comportamento natural
+entre testar outras ofertas e priorizar aquelas que apresentam melhor desempenho.
 
-Vale saber o que esperar: como a política já viu 20.000 clientes, a crença sobre `arm_005`
+Nota: como a política já viu 20.000 clientes, a crença sobre `arm_005`
 está concentrada e o sorteio quase sempre cai nele. **Isso é a exploração decaindo com a
 evidência acumulada — a propriedade central do Thompson Sampling**, não ausência de
 exploração. Uma política recém-inicializada (Beta(1,1) em todos os braços) alterna bastante
 entre eles; a treinada converge.
 
-## Escolhas de design
+## 4. Escolhas de design
 
 | Escolha | Decisão | Porquê |
 | --- | --- | --- |
@@ -111,7 +243,7 @@ serve (`uv run datathon-train`), e é essa execução que fica registrada no MLf
 terceira casa dos do notebook 03 porque o notebook sorteia com `numpy.random` e as classes
 usam `random.Random` — mesma conclusão, gerador diferente.
 
-### Etapa 4 — avaliação e golden set
+## 5. Avaliação e Golden Set (Etapa 4)
 
 `uv run datathon-evaluate` refaz a comparação acima medindo, além da conversão e do uplift,
 a **convergência**: para qual braço cada política migrou na segunda metade do horizonte e
@@ -128,8 +260,17 @@ política — o contraste entre os dois arquivos é o argumento da etapa:
 | `golden_set_em_aprendizado.json` | 500 clientes | ofertas **diferentes** — exploração viva |
 
 Cada arquivo guarda a impressão digital dos posteriors que o gerou. Se a política for
-retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --write-golden`
-— mudou o modelo, mudou a recomendação, e o time vê antes de gravar o vídeo.
+retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --write-golden`, logo se mudou o modelo, mudou a recomendação.
+
+#### Cinco casos de teste
+
+| Caso | Resumo do perfil | Recomendação | Score | Análise da decisão |
+| --- | --- | --- | ---: | --- |
+| Conversor anterior | Cliente que já converteu em campanha anterior | CDB liquidez diária (`arm_005`) | 0,4172 | Consistente com a política global, que aprendeu que essa é a oferta com maior conversão esperada na população. |
+| Estudante digital | Estudante atendido pelo canal celular | CDB liquidez diária (`arm_005`) | 0,4172 | A política atual não usa o perfil na escolha; portanto, não é possível atribuir a recomendação à condição de estudante. |
+| Aposentado | Cliente aposentado com perfil conservador | CDB liquidez diária (`arm_005`) | 0,4172 | A liquidez do produto é plausível para o perfil, mas essa característica não foi responsável pela decisão do modelo. |
+| Cliente digital de massa | Cliente típico atendido pelo canal celular | CDB liquidez diária (`arm_005`) | 0,4172 | A decisão segue o resultado agregado da política, e não uma preferência aprendida especificamente para o canal digital. |
+| Baixo engajamento | Cliente sem contatos ou conversões anteriores | CDB liquidez diária (`arm_005`) | 0,4172 | A recomendação é a mesma da população geral; a política não possui tratamento específico para baixo engajamento. |
 
 > **Ressalva de honestidade:** a política de produção é não-contextual. A API recebe e
 > registra os dados do cliente (exigência da Etapa 5), mas eles **não** alteram a oferta
@@ -139,25 +280,7 @@ retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --
 > evolução natural: `BanditPolicy.select_arm()` já recebe `context`, e uma política nova pode
 > ser registrada sem quebrar a existente.
 
-## Mapa de pastas
-
-```
-src/datathon/
-├── bandits/            # políticas: base (interface), thompson, ucb, epsilon_greedy, baseline
-├── training/           # ambiente de simulação + treino com rastreamento MLflow (Etapas 3 e 7)
-├── evaluation/         # métricas comparativas + golden set (Etapa 4)
-├── api/                # serviço FastAPI: recommender (domínio), policy_store (carga), main (HTTP)
-│   └── static/demo.html    # página de apresentação servida em /demo (Etapa 8)
-├── client_personas.py  # os 5 clientes fixos, compartilhados pelo golden set e pela demo
-├── data_loader.py      # limpeza do dataset Kaggle (Etapa 2)
-└── simulator.py        # geração dos eventos sintéticos de oferta/recompensa
-notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos
-data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
-tests/golden/           # os 5 casos congelados da Etapa 4
-reports/                # relatório de avaliação gerado por datathon-evaluate (fora do git)
-```
-
-## Etapa 6 — Arquitetura-alvo em nuvem (AWS)
+## Arquitetura-alvo em nuvem (AWS)
 
 Em produção, os dados de campanhas e as respostas dos clientes poderão ser armazenados no **Amazon S3**, mantendo separadas as camadas de dados brutos, tratados e os artefatos dos modelos. O treinamento e a avaliação das políticas de recomendação seriam executados no **Amazon SageMaker**, com o **MLflow** registrando parâmetros, métricas e versões dos experimentos. Após a validação, a aplicação e a política aprovada seriam empacotadas em uma imagem de contêiner e publicadas no **Amazon Elastic Container Registry (ECR)**.
 
@@ -190,3 +313,30 @@ flowchart LR
     pipeline -->|Publica imagem| registry
     pipeline -->|Atualiza serviço| api
 ```
+### Ciclo de vida MLOps
+
+O projeto utiliza **MLflow** para acompanhar o treinamento e manter ligação entre
+a configuração utilizada, os resultados obtidos e a política publicada na API. Cada
+execução de `datathon-train` cria um novo *run* (`data/mlruns/*`) no experimento
+`datathon-ofertas-mab`, sem sobrescrever o histórico das execuções anteriores.
+
+Para executar o treinamento e visualizar os experimentos:
+
+```bash
+uv run datathon-train
+uv run mlflow ui ## Depois, acesse `http://127.0.0.1:5000`
+```
+
+A avaliação da Etapa 4 também cria um *run* no mesmo experimento:
+
+```bash
+uv run datathon-evaluate
+```
+
+Ao iniciar, a API procura o *run* de produção mais recente no MLflow e carrega o artefato
+publicado. Se o serviço de tracking não estiver disponível, utiliza como contingência a
+cópia versionada em `data/processed/policy_state.json`. O endpoint `GET /health` informa se
+a política foi carregada do MLflow ou do arquivo local.
+
+Os diretórios locais `mlruns/`, `mlartifacts/` e o banco `mlflow.db` não são enviados ao Git,
+pois representam o estado de execução de cada ambiente.
