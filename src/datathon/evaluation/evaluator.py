@@ -14,10 +14,8 @@ adaptativa é melhor, e o que exatamente ela faz?") — uma no agregado, outra c
    `tests/golden/golden_set.json` e verificada por teste. É regressão do contrato de
    serving e roteiro para a demo da Etapa 8.
 
-Ressalva que precisa ficar visível: a política de produção é **não-contextual** (ver README, “Escolhas de design”).
-No golden set, o que faz dois casos receberem ofertas diferentes é a **seed**, não o perfil
-do cliente. Os cinco perfis existem para mostrar a variedade da base, não para sugerir uma
-personalização que o modelo não entrega.
+A política de produção é contextual. Cada perfil escolhe um segmento auditável e a seed
+torna reprodutível o sorteio Thompson dentro do posterior desse segmento.
 
 Uso:
     uv run datathon-evaluate                  # métricas + relatório
@@ -75,11 +73,9 @@ LEARNING_HORIZON = 500
 """
 Horizonte curto do segundo golden set.
 
-A política publicada foi treinada em 20.000 clientes e o posterior degenerou: `arm_005`
-acumulou milhares de observações e os cinco casos golden recebem todos a mesma oferta. Isso
-é o Thompson Sampling funcionando — a exploração decai com a evidência — mas mostra só
-metade da história. Um snapshot com 500 clientes captura a outra metade, com a política
-ainda explorando, e é o que torna a demo da Etapa 8 legível.
+A política publicada foi treinada em 20.000 clientes e seus posteriors por segmento já
+concentraram. Um snapshot com 500 clientes captura o início do aprendizado, quando a
+exploração ainda está mais ativa, tornando o contraste da demo legível.
 """
 
 
@@ -212,7 +208,9 @@ Os cinco casos golden são as personas de `datathon.client_personas` — as mesm
 página de demo oferece. Alias mantido porque "golden" é o vocabulário da Etapa 4.
 """
 
-FINGERPRINT_FIELDS = frozenset({"arm_ids", "alpha", "beta", "counts", "values", "arm_id"})
+FINGERPRINT_FIELDS = frozenset(
+    {"arm_ids", "alpha", "beta", "counts", "values", "arm_id", "segments", "posteriors"}
+)
 """
 Campos do estado serializado que efetivamente mudam a decisão.
 
@@ -238,9 +236,8 @@ def policy_fingerprint(policy_state: Dict[str, Any]) -> str:
 
 
 DEFAULT_NOTE = (
-    "Política não-contextual (ver README, “Escolhas de design”): o que distingue os casos é a seed, não o perfil "
-    "do cliente. Regravar com `uv run datathon-evaluate --write-golden` sempre que a "
-    "política for retreinada."
+    "Política contextual: cada perfil seleciona um posterior por segmento. Regravar com "
+    "`uv run datathon-evaluate --write-golden` sempre que a política for retreinada."
 )
 
 
@@ -261,7 +258,9 @@ def build_golden_set(
     cases = [
         {
             **case,
-            "expected": _as_expected(recommender.recommend(seed=case["seed"])),
+            "expected": _as_expected(
+                recommender.recommend(context=case["client"], seed=case["seed"])
+            ),
         }
         for case in GOLDEN_CLIENTS
     ]
@@ -269,7 +268,7 @@ def build_golden_set(
         "algorithm": policy_state.get("algorithm"),
         "policy_fingerprint": policy_fingerprint(policy_state),
         "catalog_version": catalog.get("version"),
-        "contextual": False,
+        "contextual": True,
         "nota": nota,
         "cases": cases,
     }
@@ -293,7 +292,7 @@ def train_snapshot_policy(catalog: Dict[str, Any], n_clients: int = LEARNING_HOR
     )
     environment = OfferEnvironment(clients, catalog, seed=OUTCOME_SEED)
     policy = build_policies([a["arm_id"] for a in catalog["arms"]], catalog["arms"])[
-        "thompson_sampling"
+        "contextual_thompson_sampling"
     ]
     run_policy(policy, environment)
     return {**policy.to_dict(), "trained_on_n_clients": n_clients}
@@ -365,8 +364,7 @@ def main() -> None:
                     f"Snapshot da mesma política com apenas {LEARNING_HORIZON} clientes de "
                     "treino, quando a exploração ainda está ativa. Contraste com "
                     "`golden_set.json` (20.000 clientes), onde o posterior já convergiu para "
-                    "um único braço. A política continua não-contextual (ver README, “Escolhas de design”): o que "
-                    "varia entre os casos é a seed."
+                    "um conjunto estável de ofertas por segmento. A política é contextual."
                 ),
                 embed_policy_state=True,
             ),

@@ -56,19 +56,19 @@ class OfferRecommender:
                 "Política e catálogo precisam ser da mesma versão."
             )
 
-    def recommend(self, seed: int | None = None) -> Recommendation:
+    def recommend(self, context: Dict[str, Any] | None = None, seed: int | None = None) -> Recommendation:
         if seed is not None:
             self._policy.reseed(seed)
-        arm_id = self._policy.select_arm()
+        arm_id = self._policy.select_arm(context)
         arm = self._arms[arm_id]
         return Recommendation(
             arm_id=arm_id,
             arm_name=arm["name"],
             channel=arm["channel"],
-            score=self._belief_in(arm_id),
+            score=self._belief_in(arm_id, context),
         )
 
-    def beliefs(self) -> list[ArmBelief]:
+    def beliefs(self, context: Dict[str, Any] | None = None) -> list[ArmBelief]:
         """
         A crença atual sobre todos os braços, do mais promissor ao menos, com a evidência
         que a sustenta.
@@ -81,19 +81,24 @@ class OfferRecommender:
             ArmBelief(
                 arm_id=arm_id,
                 arm_name=self._arms[arm_id]["name"],
-                belief=self._belief_in(arm_id),
-                observations=self._observations_for(arm_id),
+                belief=self._belief_in(arm_id, context),
+                observations=self._observations_for(arm_id, context),
             )
             for arm_id in self._policy.arm_ids
         ]
         return sorted(beliefs, key=lambda b: (b.belief is not None, b.belief), reverse=True)
 
-    def _belief_in(self, arm_id: str) -> float | None:
+    def _belief_in(self, arm_id: str, context: Dict[str, Any] | None = None) -> float | None:
         """Média posterior do braço, quando a política mantém uma (ex: Thompson Sampling)."""
         posterior_mean = getattr(self._policy, "posterior_mean", None)
-        return posterior_mean(arm_id) if posterior_mean else None
+        if not posterior_mean:
+            return None
+        try:
+            return posterior_mean(arm_id, context)
+        except TypeError:
+            return posterior_mean(arm_id)
 
-    def _observations_for(self, arm_id: str) -> float | None:
+    def _observations_for(self, arm_id: str, context: Dict[str, Any] | None = None) -> float | None:
         """
         Rodadas observadas no braço, descontando o prior.
 
@@ -101,6 +106,9 @@ class OfferRecommender:
         rodada soma 1. Por isso o −2 — sem ele, uma política recém-criada alegaria duas
         observações que nunca aconteceram.
         """
+        observations = getattr(self._policy, "observations", None)
+        if observations:
+            return observations(arm_id, context)
         alpha, beta = getattr(self._policy, "alpha", None), getattr(self._policy, "beta", None)
         if alpha is None or beta is None:
             return None

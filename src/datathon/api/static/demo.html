@@ -220,12 +220,22 @@ async function recommend(useSeed = true) {
   $("explore-out").textContent = "";
   flash($("result-card"));
 
-  await renderPolicy(policy, result.arm_id);
+  await renderPolicy(policy, result.arm_id, persona.client);
   return result;
 }
 
-async function renderPolicy(policy, chosenArm) {
-  const state = await api(`/policy?policy=${policy}`);
+function segmentFor(client) {
+  if (client.poutcome === "success") return "previous_converter";
+  if (client.job === "student" && client.contact === "cellular") return "student_digital";
+  if (client.job === "retired") return "retired";
+  if ((client.previous ?? 0) === 0) return "low_engagement";
+  if (client.contact === "cellular") return "digital_channel";
+  return "general";
+}
+
+async function renderPolicy(policy, chosenArm, client) {
+  const segment = segmentFor(client);
+  const state = await api(`/policy?policy=${policy}&segment=${segment}`);
   const max = Math.max(...state.arms.map((a) => a.belief ?? 0), 0.0001);
 
   $("arms").innerHTML = state.arms.map((arm) => `
@@ -242,8 +252,8 @@ async function renderPolicy(policy, chosenArm) {
 
   $("policy-note").textContent = concentration > 0.8
     ? `Treinada em ${obs(state.trained_on_n_clients)} clientes: ${pct(concentration)} de toda a `
-      + `evidência está em ${top.arm_id}. A política já decidiu — por isso clientes diferentes `
-      + `recebem a mesma oferta. Isso é a exploração decaindo com a evidência, não falta de exploração.`
+      + `evidência do segmento ${state.segment} está em ${top.arm_id}. A exploração desse `
+      + `segmento já decaiu; outros perfis podem convergir para ofertas diferentes.`
     : `Treinada em ${obs(state.trained_on_n_clients)} clientes: a evidência ainda está espalhada `
       + `entre os braços, então a política continua testando alternativas. Compare com a crença `
       + `publicada para ver o mesmo algoritmo depois de aprender.`;

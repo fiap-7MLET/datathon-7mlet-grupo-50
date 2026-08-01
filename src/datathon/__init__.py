@@ -3,6 +3,7 @@ from .bandits.baseline import FixedArmPolicy, RandomPolicy
 from .bandits.thompson import ThompsonSamplingPolicy
 from .bandits.ucb import UCB1Policy
 from .bandits.epsilon_greedy import EpsilonGreedyPolicy
+from .bandits.contextual_thompson import ContextualThompsonSamplingPolicy
 
 _REGISTRY = {
     "fixed_arm": FixedArmPolicy,
@@ -10,6 +11,7 @@ _REGISTRY = {
     "thompson_sampling": ThompsonSamplingPolicy,
     "ucb1": UCB1Policy,
     "epsilon_greedy": EpsilonGreedyPolicy,
+    "contextual_thompson_sampling": ContextualThompsonSamplingPolicy,
 }
 
 
@@ -28,5 +30,6 @@ __all__ = [
     "ThompsonSamplingPolicy",
     "UCB1Policy",
     "EpsilonGreedyPolicy",
+    "ContextualThompsonSamplingPolicy",
     "load_policy",
 ]

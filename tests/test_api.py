@@ -35,7 +35,7 @@ def test_health_reports_the_policy_being_served(client):
     body = client.get("/health").json()
 
     assert body["status"] == "ok"
-    assert body["algorithm"] == "thompson_sampling"
+    assert body["algorithm"] == "contextual_thompson_sampling"
     assert body["n_arms"] > 1
     assert "publicada" in body["policies_available"]
 
@@ -57,14 +57,14 @@ def test_the_same_seed_always_returns_the_same_offer(client):
     assert len(offers) == 1
 
 
-def test_the_response_says_the_policy_is_not_contextual(client):
+def test_the_response_says_the_policy_is_contextual(client):
     """
     A API recebe os dados do cliente por exigência da Etapa 5, mas não os usa para decidir.
     O campo é o que impede que a demo prometa personalização (ver README, “Escolhas de design”).
     """
     body = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()
 
-    assert body["contextual"] is False
+    assert body["contextual"] is True
 
 
 def test_an_invalid_client_is_rejected_before_reaching_the_policy(client):
@@ -78,7 +78,7 @@ def test_policy_exposes_the_belief_and_evidence_for_every_arm(client):
     """`/policy` é o que torna a decisão auditável — e o que a demo desenha em barras."""
     body = client.get("/policy").json()
 
-    assert body["algorithm"] == "thompson_sampling"
+    assert body["algorithm"] == "contextual_thompson_sampling"
     assert len(body["arms"]) > 1
 
     beliefs = [arm["belief"] for arm in body["arms"]]
@@ -92,7 +92,7 @@ def test_the_chosen_arm_is_the_one_the_policy_believes_most_in(client):
     `/policy`. Só vale com o posterior convergido — que é o estado da política publicada.
     """
     recommended = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()["arm_id"]
-    top_arm = client.get("/policy").json()["arms"][0]
+    top_arm = client.get("/policy?segment=previous_converter").json()["arms"][0]
 
     if top_arm["observations"] < 1000:
         pytest.skip("Política ainda explorando; a coerência só é exigível após convergir.")

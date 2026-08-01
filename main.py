@@ -1,5 +1,10 @@
+"""Atalho para iniciar a API quando o repositório é executado diretamente."""
+
+from datathon.api.main import run
+
+
 def main():
-    print("Hello from datathon-7mlet-grupo-50!")
+    run()
 
 
 if __name__ == "__main__":

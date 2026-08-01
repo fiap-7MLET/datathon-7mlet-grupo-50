@@ -21,6 +21,7 @@ import pandas as pd
 
 from ..bandits.baseline import FixedArmPolicy, RandomPolicy
 from ..bandits.epsilon_greedy import EpsilonGreedyPolicy
+from ..bandits.contextual_thompson import ContextualThompsonSamplingPolicy
 from ..bandits.thompson import ThompsonSamplingPolicy
 from ..bandits.ucb import UCB1Policy
 from ..policy_artifact import (
@@ -50,6 +51,7 @@ def build_policies(arm_ids, arms):
         "baseline_fixo": FixedArmPolicy.from_catalog_best_base_rate(arms),
         "baseline_aleatorio": RandomPolicy(arm_ids, seed=123),
         "thompson_sampling": ThompsonSamplingPolicy(arm_ids, seed=7),
+        "contextual_thompson_sampling": ContextualThompsonSamplingPolicy(arm_ids, seed=11),
         "ucb1": UCB1Policy(arm_ids),
         "epsilon_greedy": EpsilonGreedyPolicy(arm_ids, epsilon=EPSILON, seed=99),
     }
@@ -82,7 +84,7 @@ def train(n_clients: int = N_CLIENTS) -> Dict[str, Any]:
                 "epsilon": EPSILON,
                 "thompson_prior_alpha": 1.0,
                 "thompson_prior_beta": 1.0,
-                "production_policy": "thompson_sampling",
+                "production_policy": "contextual_thompson_sampling",
             }
         )
 
@@ -102,7 +104,7 @@ def train(n_clients: int = N_CLIENTS) -> Dict[str, Any]:
                 result["converged_arm"],
             )
 
-        production = policies["thompson_sampling"]
+        production = policies["contextual_thompson_sampling"]
         policy_state = {
             **production.to_dict(),
             "trained_on_n_clients": n_clients,

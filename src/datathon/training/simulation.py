@@ -73,6 +73,7 @@ class OfferEnvironment:
         seg_mult = {a["arm_id"]: a["segment_multipliers"] for a in catalog["arms"]}
 
         segments = [derive_segments(row) for _, row in clients.iterrows()]
+        self.contexts = clients.to_dict(orient="records")
         n_clients, n_arms = len(clients), len(self.arm_ids)
 
         probabilities = np.zeros((n_clients, n_arms))
@@ -107,7 +108,7 @@ def run_policy(policy: BanditPolicy, environment: OfferEnvironment) -> Dict[str,
     choices = []
 
     for i in range(len(environment)):
-        arm_id = policy.select_arm()
+        arm_id = policy.select_arm(environment.contexts[i])
         reward = environment.reward(i, arm_id)
         policy.update(arm_id, reward)
         rewards[i] = reward

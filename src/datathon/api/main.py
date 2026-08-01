@@ -4,10 +4,8 @@ Etapa 5 — serviço de recomendação de ofertas.
 Recebe os dados de um cliente e devolve a oferta recomendada pela política treinada na
 Etapa 3 e registrada no MLflow na Etapa 7.
 
-Uma ressalva importante e deliberada: a política de produção é **não-contextual**
-(ver README, “Escolhas de design”). Os dados do cliente são validados e registrados no log, mas **não** alteram a
-escolha do braço — a recomendação vem da crença populacional aprendida na simulação. Dois
-clientes diferentes podem receber a mesma oferta, e isso é o comportamento esperado.
+A política de produção é contextual: os atributos do cliente determinam um segmento
+auditável e a decisão usa o posterior aprendido para esse segmento.
 
 Uso:
     uv run datathon-serve
@@ -37,6 +35,10 @@ PUBLISHED = "publicada"
 LEARNING = "em_aprendizado"
 
 PolicyChoice = Literal["publicada", "em_aprendizado"]
+SegmentChoice = Literal[
+    "previous_converter", "student_digital", "retired", "low_engagement",
+    "digital_channel", "general"
+]
 """
 Qual crença atender.
 
@@ -85,12 +87,8 @@ class RecommendationResponse(BaseModel):
     policy: PolicyChoice = Field(
         default=PUBLISHED, description="Qual crença respondeu: a publicada ou o snapshot da demo."
     )
-    contextual: Literal[False] = Field(
-        default=False,
-        description=(
-            "A política de produção é não-contextual (ver README, “Escolhas de design”): os dados do cliente são "
-            "registrados mas não influenciam a escolha do braço."
-        ),
+    contextual: Literal[True] = Field(
+        default=True, description="Os atributos do cliente influenciam a escolha da oferta."
     )
 
 
@@ -124,6 +122,7 @@ class PolicyResponse(BaseModel):
     trained_on_n_clients: Optional[int] = Field(
         description="Tamanho do horizonte de treino desta crença."
     )
+    segment: str
     arms: list[ArmBeliefResponse]
 
 
@@ -215,6 +214,7 @@ def policy(
     policy: PolicyChoice = Query(
         default=PUBLISHED, description="Qual crença inspecionar."
     ),
+    segment: SegmentChoice = Query(default="general", description="Segmento a auditar."),
 ) -> PolicyResponse:
     """
     Abre a caixa-preta: o que a política acredita sobre **cada** braço, e com quanta
@@ -226,7 +226,11 @@ def policy(
         policy=policy,
         algorithm=meta["algorithm"],
         trained_on_n_clients=meta["trained_on_n_clients"],
-        arms=[ArmBeliefResponse(**vars(belief)) for belief in recommender.beliefs()],
+        segment=segment,
+        arms=[
+            ArmBeliefResponse(**vars(belief))
+            for belief in recommender.beliefs({"segment_override": segment})
+        ],
     )
 
 
@@ -273,7 +277,7 @@ def recommend(
     """Recebe os dados de um cliente e devolve a oferta recomendada."""
     recommender = _recommender_for(policy)
 
-    recommendation = recommender.recommend(seed=seed)
+    recommendation = recommender.recommend(context=client.model_dump(), seed=seed)
     logger.info(
         "Recomendação para cliente (job=%s, contact=%s) via política %s: %s",
         client.job,

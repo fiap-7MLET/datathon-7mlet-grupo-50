@@ -8,9 +8,8 @@ botões. Se divergissem, a demo mostraria um caso que nenhum teste protege.
 Cada persona traz uma `seed`. Com ela a recomendação é reproduzível (ver README, “Reprodutibilidade”) — é o que
 permite ensaiar a apresentação sabendo o que a API vai responder.
 
-Ressalva que precisa acompanhar estes dados onde quer que apareçam: a política é
-**não-contextual** (ver README, “Escolhas de design”). Os perfis descrevem a variedade da base e alimentam o log da
-API, mas não alteram a oferta escolhida. O que distingue as respostas é a seed.
+A política é contextual: os perfis determinam o segmento cujo posterior participa da
+decisão. A seed controla apenas o sorteio reprodutível dentro desse segmento.
 """
 
 from __future__ import annotations

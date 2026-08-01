@@ -1,9 +1,9 @@
 {
-  "algorithm": "thompson_sampling",
-  "policy_fingerprint": "f8b9f980cc8d20e3",
+  "algorithm": "contextual_thompson_sampling",
+  "policy_fingerprint": "e6055eac7a40db36",
   "catalog_version": "1.0.0",
-  "contextual": false,
-  "nota": "Política não-contextual (ver README, “Escolhas de design”): o que distingue os casos é a seed, não o perfil do cliente. Regravar com `uv run datathon-evaluate --write-golden` sempre que a política for retreinada.",
+  "contextual": true,
+  "nota": "Política contextual: cada perfil seleciona um posterior por segmento. Regravar com `uv run datathon-evaluate --write-golden` sempre que a política for retreinada.",
   "cases": [
     {
       "case_id": "previous_converter",
@@ -25,9 +25,9 @@
         "poutcome": "success"
       },
       "expected": {
-        "arm_id": "arm_005",
-        "arm_name": "CDB liquidez diária",
-        "score": 0.41719647251845776
+        "arm_id": "arm_004",
+        "arm_name": "LCI / LCA 90 dias",
+        "score": 0.7431506849315068
       }
     },
     {
@@ -50,9 +50,9 @@
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_005",
-        "arm_name": "CDB liquidez diária",
-        "score": 0.41719647251845776
+        "arm_id": "arm_008",
+        "arm_name": "Poupança estudantil",
+        "score": 0.9393939393939394
       }
     },
     {
@@ -77,7 +77,7 @@
       "expected": {
         "arm_id": "arm_005",
         "arm_name": "CDB liquidez diária",
-        "score": 0.41719647251845776
+        "score": 0.8547008547008547
       }
     },
     {
@@ -102,7 +102,7 @@
       "expected": {
         "arm_id": "arm_005",
         "arm_name": "CDB liquidez diária",
-        "score": 0.41719647251845776
+        "score": 0.39930599369085173
       }
     },
     {
@@ -127,7 +127,7 @@
       "expected": {
         "arm_id": "arm_005",
         "arm_name": "CDB liquidez diária",
-        "score": 0.41719647251845776
+        "score": 0.39930599369085173
       }
     }
   ]
