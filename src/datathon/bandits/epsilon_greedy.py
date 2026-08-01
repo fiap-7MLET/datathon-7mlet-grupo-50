@@ -44,6 +44,9 @@ class EpsilonGreedyPolicy(BanditPolicy):
         means = {aid: self.sums[aid] / self.counts[aid] for aid in self.arm_ids}
         return max(means, key=means.get)
 
+    def reseed(self, seed: Optional[int]) -> None:
+        self._rng.seed(seed)
+
     def update(self, arm_id: str, reward: float) -> None:
         self._check_arm(arm_id)
         self.counts[arm_id] += 1

@@ -60,6 +60,9 @@ class RandomPolicy(BanditPolicy):
     def select_arm(self, context: Optional[Dict[str, Any]] = None) -> str:
         return self._rng.choice(self.arm_ids)
 
+    def reseed(self, seed: Optional[int]) -> None:
+        self._rng.seed(seed)
+
     def update(self, arm_id: str, reward: float) -> None:
         pass
 

@@ -42,6 +42,9 @@ class ThompsonSamplingPolicy(BanditPolicy):
         }
         return max(samples, key=samples.get)
 
+    def reseed(self, seed: Optional[int]) -> None:
+        self._rng.seed(seed)
+
     def update(self, arm_id: str, reward: float) -> None:
         self._check_arm(arm_id)
         self.alpha[arm_id] += reward

@@ -42,6 +42,18 @@ class BanditPolicy(ABC):
         """Reconstrói a política a partir do estado serializado."""
         raise NotImplementedError
 
+    def reseed(self, seed: Optional[int]) -> None:
+        """
+        Refixa a fonte de aleatoriedade da política, tornando a próxima escolha reproduzível.
+
+        A seed é uma escolha de quem chama (ex: a API, para o golden set), não faz parte da
+        crença aprendida — por isso não é serializada em `to_dict()`.
+
+        Este no-op é o comportamento correto para políticas determinísticas
+        (`FixedArmPolicy`, `UCB1Policy`), que não têm fonte de aleatoriedade. As que têm
+        sobrescrevem este método.
+        """
+
     def _check_arm(self, arm_id: str) -> None:
         if arm_id not in self.arm_ids:
             raise ValueError(f"arm_id desconhecido: {arm_id!r}. Braços válidos: {self.arm_ids}")
