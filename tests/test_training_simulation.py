@@ -134,8 +134,11 @@ def test_offer_environment_reward_looks_up_the_right_arm_column():
     clients = pd.DataFrame([_client(), _client(job="student", month="mar")])
     environment = OfferEnvironment(clients, CATALOG, seed=7)
 
-    assert environment.reward(0, "arm_low") in (0, 1)
-    assert environment.reward(1, "arm_high") in (0, 1)
+    # reward() precisa devolver a célula da matriz contrafactual do braço pedido — comparar
+    # com `outcomes` (e não só com {0,1}) é o que pega uma troca de coluna ou um valor fixo.
+    for i in range(2):
+        for j, arm_id in enumerate(environment.arm_ids):
+            assert environment.reward(i, arm_id) == environment.outcomes[i, j]
     assert len(environment) == 2
 
 
@@ -159,5 +162,7 @@ def test_run_policy_conversion_rate_matches_the_manual_mean_of_observed_rewards(
 
     result = run_policy(policy, environment)
 
-    manual_rewards = [environment.reward(i, "arm_low") for i in range(6)]
+    # lê a matriz direto, não via reward(), para o teste não se apoiar no mesmo código.
+    arm_column = environment.arm_ids.index("arm_low")
+    manual_rewards = [int(environment.outcomes[i, arm_column]) for i in range(6)]
     assert result["conversion_rate"] == pytest.approx(sum(manual_rewards) / 6)
