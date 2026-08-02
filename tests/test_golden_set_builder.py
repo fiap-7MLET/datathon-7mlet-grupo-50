@@ -5,10 +5,9 @@ Testes de `policy_fingerprint` e `build_golden_set` (`datathon.evaluation.evalua
 aqui testamos a função que os gera, com uma política e um catálogo sintéticos — sem
 depender do dataset real nem dos cinco `CLIENT_PERSONAS` fixos.
 
-`evaluate()`, `train_snapshot_policy()` e `main()` não são exercitados: dependem de
-`data/processed/bank_marketing_processed.parquet` (não versionado — gerado por
-`datathon.data_loader` a partir do CSV do Kaggle) e, no caso de `main()`, também de um
-MLflow tracking server. Ver nota no relatório de cobertura.
+`evaluate()`, `train_snapshot_policy()` e `main()` são cobertos em
+`test_evaluate_pipeline.py`, que substitui o dataset real (`CLIENTS_PATH`) por um parquet
+sintético e o MLflow por um tracking store local em SQLite.
 """
 
 import json

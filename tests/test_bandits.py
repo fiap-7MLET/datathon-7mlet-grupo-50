@@ -279,12 +279,16 @@ def test_ucb1_score_formula_matches_the_documented_bonus():
     policy.update("arm_a", reward=1.0)
 
     t = policy._t + 1
-    expected_arm_a = (1.0 / 2) + math.sqrt(2 * math.log(t) / 2)
-    expected_arm_b = 0.0 + math.sqrt(2 * math.log(t) / 1)
+    expected = {
+        "arm_a": (1.0 / 2) + math.sqrt(2 * math.log(t) / 2),
+        "arm_b": 0.0 + math.sqrt(2 * math.log(t) / 1),
+        "arm_c": 0.0 + math.sqrt(2 * math.log(t) / 1),
+    }
 
-    assert expected_arm_a != pytest.approx(expected_arm_b)
+    assert expected["arm_a"] != pytest.approx(expected["arm_b"])
     chosen = policy.select_arm()
-    assert chosen in ARM_IDS
+
+    assert chosen == max(expected, key=lambda aid: expected[aid]) == "arm_b"
 
 
 def test_ucb1_update_rejects_an_unknown_arm():

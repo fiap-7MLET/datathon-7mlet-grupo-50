@@ -122,8 +122,9 @@ def test_train_runs_end_to_end_against_a_synthetic_dataset_and_a_local_mlflow_st
     """
     `train()` normalmente lê o parquet real (Kaggle, não versionado) e registra no MLflow.
     Aqui substituímos os dois por um dataset sintético pequeno e um tracking store local
-    baseado em arquivo (`file:`), que não exige nenhum servidor — só disco. É um teste de
-    integração de verdade, não um mock do MLflow.
+    em SQLite (`sqlite:///`), que não exige nenhum servidor — só disco. O backend legado
+    baseado em arquivo (`file:`) não serve: a versão instalada do MLflow o bloqueia. É um
+    teste de integração de verdade, não um mock do MLflow.
     """
     import mlflow
 
