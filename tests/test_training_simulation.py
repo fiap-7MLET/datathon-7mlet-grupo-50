@@ -106,12 +106,14 @@ def test_offer_environment_caps_probabilities_at_the_documented_maximum():
     }
     clients = pd.DataFrame([_client(month="mar")])  # ativa high_season -> 0.9*5=4.5, capado
 
-    environment = OfferEnvironment(clients, catalog, seed=1)
+    environment = OfferEnvironment(clients, catalog, seed=4)
 
-    # noise em [0,1) < probabilidade capada em 0.95 quase sempre: usamos uma seed fixa e
-    # conferimos que a implementação de fato aplicou o cap comparando com o cálculo manual.
-    noise = np.random.RandomState(1).random_sample((1, 1))
+    # seed=4 gera noise ~0.967: entre a probabilidade capada (0.95) e a não capada
+    # (0.9*5=4.5), então outcome=0 só ocorre se o cap foi de fato aplicado.
+    noise = np.random.RandomState(4).random_sample((1, 1))
+    assert 0.95 < noise[0, 0] < 1.0
     expected_outcome = int(noise[0, 0] < 0.95)
+    assert expected_outcome == 0
     assert environment.outcomes[0, 0] == expected_outcome
 
 

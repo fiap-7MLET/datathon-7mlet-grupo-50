@@ -20,6 +20,7 @@ import pandas as pd
 import pytest
 
 from datathon.evaluation import evaluator
+from datathon.evaluation.evaluator import EXPERIMENT_NAME
 
 SYNTHETIC_COLUMNS = [
     "poutcome", "month", "job", "contact", "education", "housing", "loan",
@@ -155,6 +156,17 @@ def test_main_writes_the_report_and_registers_metrics_in_mlflow(
     report = evaluator.REPORT_PATH.read_text(encoding="utf-8")
     assert "thompson_sampling" in report
     assert not evaluator.GOLDEN_SET_PATH.exists(), "sem --write-golden, nada deve ser gravado"
+
+    import mlflow
+
+    client = mlflow.tracking.MlflowClient()
+    experiment = client.get_experiment_by_name(EXPERIMENT_NAME)
+    assert experiment is not None
+    runs = client.search_runs([experiment.experiment_id], filter_string="tags.mlflow.runName = 'avaliacao-etapa4'")
+    assert len(runs) == 1
+    run = runs[0]
+    assert any(name.startswith("conversao_") for name in run.data.metrics)
+    assert any(name.startswith("uplift_vs_fixo_") for name in run.data.metrics)
 
 
 def test_main_with_write_golden_regenerates_both_golden_sets(main_cli_environment, monkeypatch):
