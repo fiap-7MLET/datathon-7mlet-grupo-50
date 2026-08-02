@@ -101,3 +101,32 @@ def test_without_a_seed_the_policy_explores():
     drawn = {recommender.recommend().arm_id for _ in range(60)}
 
     assert drawn == {"arm_a", "arm_b"}, "sem seed os dois braços devem aparecer"
+
+
+def test_beliefs_reports_the_posterior_mean_and_observations_sorted_best_first():
+    """`/policy` (GET) mostra isso braço a braço, do mais promissor ao menos."""
+    recommender = OfferRecommender(
+        policy_state=policy_state(alpha=[500.0, 1.0], beta=[1.0, 500.0]),
+        catalog=CATALOG,
+    )
+
+    beliefs = recommender.beliefs()
+
+    assert [b.arm_id for b in beliefs] == ["arm_a", "arm_b"]
+    assert beliefs[0].belief == pytest.approx(500 / 501)
+    # alpha+beta começa em 2 (prior Beta(1,1) sem evidência): 501 observações reais.
+    assert beliefs[0].observations == pytest.approx(499.0)
+
+
+def test_beliefs_are_none_for_a_policy_without_a_posterior():
+    """FixedArmPolicy não mantém crença nem contagem — ambos devem vir `None`, não um erro."""
+    stale = {
+        "algorithm": "fixed_arm",
+        "arm_ids": ["arm_a", "arm_b"],
+        "fixed_arm": "arm_a",
+    }
+    recommender = OfferRecommender(policy_state=stale, catalog=CATALOG)
+
+    beliefs = recommender.beliefs()
+
+    assert all(b.belief is None and b.observations is None for b in beliefs)
