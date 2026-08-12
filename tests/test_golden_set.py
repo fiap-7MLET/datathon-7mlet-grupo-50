@@ -80,7 +80,17 @@ def test_golden_set_has_the_five_cases_the_spec_asks_for(any_golden):
 
     assert len(cases) == 5
     assert len({case["case_id"] for case in cases}) == 5, "case_id duplicado"
-    assert len({case["seed"] for case in cases}) == 5, "seeds repetidas escondem casos"
+
+
+def test_golden_cases_share_the_same_seed(any_golden):
+    """
+    De propósito: seed diferente por caso permitiria confundir "mudou de oferta por causa
+    do perfil" com "mudou por causa do sorteio". Com uma seed só, a única variável que resta
+    entre os 5 casos é o segmento — ver docstring de `client_personas.py`.
+    """
+    cases = any_golden["cases"]
+
+    assert len({case["seed"] for case in cases}) == 1, "seeds deveriam ser todas iguais"
 
 
 def test_each_golden_case_reproduces_its_frozen_recommendation(golden, policy_state, catalog):

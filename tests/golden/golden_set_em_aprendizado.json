@@ -8,7 +8,7 @@
     {
       "case_id": "previous_converter",
       "descricao": "Já converteu em campanha anterior — segmento de maior conversão real (65,1%).",
-      "seed": 101,
+      "seed": 42,
       "client": {
         "age": 47,
         "job": "management",
@@ -25,15 +25,15 @@
         "poutcome": "success"
       },
       "expected": {
-        "arm_id": "arm_007",
-        "arm_name": "CDB 24 meses (premium)",
-        "score": 0.6666666666666666
+        "arm_id": "arm_005",
+        "arm_name": "CDB liquidez diária",
+        "score": 0.75
       }
     },
     {
       "case_id": "student_digital",
       "descricao": "Estudante em canal digital, em alta temporada (março).",
-      "seed": 202,
+      "seed": 42,
       "client": {
         "age": 22,
         "job": "student",
@@ -50,15 +50,15 @@
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_001",
-        "arm_name": "CDB 12 meses",
-        "score": 0.6666666666666666
+        "arm_id": "arm_control",
+        "arm_name": "Nenhuma ação",
+        "score": 0.5
       }
     },
     {
       "case_id": "retired",
       "descricao": "Aposentado — perfil conservador, conversão real de 17,6%.",
-      "seed": 303,
+      "seed": 42,
       "client": {
         "age": 68,
         "job": "retired",
@@ -75,15 +75,15 @@
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_005",
-        "arm_name": "CDB liquidez diária",
-        "score": 0.8181818181818182
+        "arm_id": "arm_002",
+        "arm_name": "Poupança digital",
+        "score": 0.7142857142857143
       }
     },
     {
       "case_id": "digital_channel_massa",
       "descricao": "Cliente típico da maior fatia da base (54% em canal digital).",
-      "seed": 404,
+      "seed": 42,
       "client": {
         "age": 38,
         "job": "admin.",
@@ -96,19 +96,19 @@
         "month": "jul",
         "day_of_week": "thu",
         "campaign": 3,
-        "previous": 0,
+        "previous": 1,
         "poutcome": "nonexistent"
       },
       "expected": {
         "arm_id": "arm_008",
         "arm_name": "Poupança estudantil",
-        "score": 0.3181818181818182
+        "score": 0.35714285714285715
       }
     },
     {
       "case_id": "low_engagement",
       "descricao": "Nunca contactado antes — o caso mais frio, conversão real de 3,7%.",
-      "seed": 505,
+      "seed": 42,
       "client": {
         "age": 31,
         "job": "blue-collar",

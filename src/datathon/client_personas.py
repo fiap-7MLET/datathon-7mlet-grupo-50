@@ -5,8 +5,11 @@ Vivem aqui, e não dentro de um dos dois, porque os dois precisam exatamente dos
 perfis: o golden set congela a recomendação de cada um, e a página de demo os oferece como
 botões. Se divergissem, a demo mostraria um caso que nenhum teste protege.
 
-Cada persona traz uma `seed`. Com ela a recomendação é reproduzível (ver README, “Reprodutibilidade”) — é o que
-permite ensaiar a apresentação sabendo o que a API vai responder.
+Todas as personas compartilham a mesma `GOLDEN_SEED` (ver README, "Reprodutibilidade"). De
+propósito: a seed não é parâmetro do modelo, é só o sorteio Thompson dentro do segmento — se
+cada persona tivesse uma seed diferente, uma eventual diferença de oferta entre duas
+personas poderia ser por causa do sorteio, não do perfil. Com a seed fixa e igual para
+todas, a única variável que resta é o segmento — o argumento de personalização fica limpo.
 
 A política é contextual: os perfis determinam o segmento cujo posterior participa da
 decisão. A seed controla apenas o sorteio reprodutível dentro desse segmento.
@@ -16,11 +19,19 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+GOLDEN_SEED = 42
+"""
+Seed única, compartilhada por todas as personas (e pelo modo "Personalizado" da demo).
+
+Não há motivo técnico para variar por caso — variar só convidaria a confundir "mudou de
+oferta por causa do perfil" com "mudou por causa do sorteio". Ver docstring do módulo.
+"""
+
 CLIENT_PERSONAS: List[Dict[str, Any]] = [
     {
         "case_id": "previous_converter",
         "descricao": "Já converteu em campanha anterior — segmento de maior conversão real (65,1%).",
-        "seed": 101,
+        "seed": GOLDEN_SEED,
         "client": {
             "age": 47,
             "job": "management",
@@ -40,7 +51,7 @@ CLIENT_PERSONAS: List[Dict[str, Any]] = [
     {
         "case_id": "student_digital",
         "descricao": "Estudante em canal digital, em alta temporada (março).",
-        "seed": 202,
+        "seed": GOLDEN_SEED,
         "client": {
             "age": 22,
             "job": "student",
@@ -60,7 +71,7 @@ CLIENT_PERSONAS: List[Dict[str, Any]] = [
     {
         "case_id": "retired",
         "descricao": "Aposentado — perfil conservador, conversão real de 17,6%.",
-        "seed": 303,
+        "seed": GOLDEN_SEED,
         "client": {
             "age": 68,
             "job": "retired",
@@ -80,7 +91,7 @@ CLIENT_PERSONAS: List[Dict[str, Any]] = [
     {
         "case_id": "digital_channel_massa",
         "descricao": "Cliente típico da maior fatia da base (54% em canal digital).",
-        "seed": 404,
+        "seed": GOLDEN_SEED,
         "client": {
             "age": 38,
             "job": "admin.",
@@ -93,14 +104,14 @@ CLIENT_PERSONAS: List[Dict[str, Any]] = [
             "month": "jul",
             "day_of_week": "thu",
             "campaign": 3,
-            "previous": 0,
+            "previous": 1,
             "poutcome": "nonexistent",
         },
     },
     {
         "case_id": "low_engagement",
         "descricao": "Nunca contactado antes — o caso mais frio, conversão real de 3,7%.",
-        "seed": 505,
+        "seed": GOLDEN_SEED,
         "client": {
             "age": 31,
             "job": "blue-collar",

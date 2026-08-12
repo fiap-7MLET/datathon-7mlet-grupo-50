@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from ..client_personas import CLIENT_PERSONAS
@@ -63,7 +63,9 @@ class ClientFeatures(BaseModel):
     job: str = Field(default=UNKNOWN, description="Ocupação (ex: student, retired, admin.).")
     marital: str = Field(default=UNKNOWN, description="Estado civil.")
     education: str = Field(default=UNKNOWN, description="Nível educacional.")
-    default: str = Field(default=UNKNOWN, description="Possui crédito em default? yes/no.")
+    default: str = Field(
+        default=UNKNOWN, description="Está inadimplente em algum crédito? yes/no."
+    )
     housing: str = Field(default=UNKNOWN, description="Possui financiamento imobiliário?")
     loan: str = Field(default=UNKNOWN, description="Possui empréstimo pessoal?")
     contact: str = Field(default=UNKNOWN, description="Canal de contato: cellular/telephone.")
@@ -83,6 +85,9 @@ class RecommendationResponse(BaseModel):
     score: Optional[float] = Field(
         description="Crença atual da política na taxa de conversão do braço (média posterior)."
     )
+    segment: Optional[str] = Field(
+        description="Segmento que os atributos do cliente ativaram — a base da personalização."
+    )
     algorithm: str = Field(description="Algoritmo que produziu a recomendação.")
     policy: PolicyChoice = Field(
         default=PUBLISHED, description="Qual crença respondeu: a publicada ou o snapshot da demo."
@@ -90,6 +95,12 @@ class RecommendationResponse(BaseModel):
     contextual: Literal[True] = Field(
         default=True, description="Os atributos do cliente influenciam a escolha da oferta."
     )
+
+
+class SegmentResponse(BaseModel):
+    """Resultado isolado de `context_segment()` — sem sortear, sem gastar estado da política."""
+
+    segment: str = Field(description="Segmento que estes atributos de cliente ativam.")
 
 
 class HealthResponse(BaseModel):
@@ -244,6 +255,12 @@ def personas() -> list[PersonaResponse]:
     return [PersonaResponse(**persona) for persona in CLIENT_PERSONAS]
 
 
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Quem abre a raiz do serviço provavelmente quer a demo, não um 404."""
+    return RedirectResponse(url="/demo")
+
+
 @app.get("/demo", response_class=HTMLResponse, include_in_schema=False)
 def demo() -> HTMLResponse:
     """
@@ -290,9 +307,32 @@ def recommend(
         arm_name=recommendation.arm_name,
         channel=recommendation.channel,
         score=recommendation.score,
+        segment=recommendation.segment,
         algorithm=app_state["policy_meta"][policy]["algorithm"],
         policy=policy,
     )
+
+
+@app.post("/segment", response_model=SegmentResponse)
+def segment(
+    client: ClientFeatures,
+    policy: PolicyChoice = Query(default=PUBLISHED, description="Qual crença calcula o segmento."),
+) -> SegmentResponse:
+    """
+    Só o passo "atributos → segmento", sem sortear nem gastar o estado da política.
+
+    Existe para a tela de simulação de cliente mostrar o segmento assim que o usuário
+    edita um campo, sem forçar um sorteio Thompson a cada tecla — `POST /recommend` é o
+    único caminho que decide de fato e consome aleatoriedade.
+    """
+    recommender = _recommender_for(policy)
+    result = recommender.segment_for(client.model_dump())
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A crença '{policy}' não é contextual — não há segmento a calcular.",
+        )
+    return SegmentResponse(segment=result)
 
 
 def run() -> None:

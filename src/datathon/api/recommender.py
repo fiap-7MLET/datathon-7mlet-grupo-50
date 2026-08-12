@@ -42,6 +42,8 @@ class Recommendation:
     """Canal de entrega. O catálogo usa um canal, uma lista, ou `null` no braço de controle."""
     score: float | None
     """Crença atual na taxa de conversão do braço. `None` se a política não expõe uma."""
+    segment: str | None
+    """Segmento que os atributos do cliente ativaram. `None` se a política não é contextual."""
 
 
 class OfferRecommender:
@@ -66,7 +68,19 @@ class OfferRecommender:
             arm_name=arm["name"],
             channel=arm["channel"],
             score=self._belief_in(arm_id, context),
+            segment=self.segment_for(context),
         )
+
+    def segment_for(self, context: Dict[str, Any] | None = None) -> str | None:
+        """
+        Segmento que este contexto ativa, sem sortear nem alterar estado.
+
+        Pura de propósito: permite à API mostrar "atributos → segmento" como um passo
+        auditável antes de gastar o sorteio Thompson, e alimenta a pré-visualização ao
+        vivo da tela de simulação de cliente. `None` se a política não é contextual.
+        """
+        segment_for = getattr(self._policy, "segment_for", None)
+        return segment_for(context) if segment_for else None
 
     def beliefs(self, context: Dict[str, Any] | None = None) -> list[ArmBelief]:
         """

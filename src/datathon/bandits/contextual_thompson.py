@@ -54,6 +54,10 @@ class ContextualThompsonSamplingPolicy(BanditPolicy):
         self._rng = random.Random(seed)
         self._last_segment = "general"
 
+    def segment_for(self, context: Optional[Dict[str, Any]] = None) -> str:
+        """Segmento que este contexto ativaria, sem sortear nem mudar estado."""
+        return context_segment(context)
+
     def select_arm(self, context: Optional[Dict[str, Any]] = None) -> str:
         self._last_segment = context_segment(context)
         segment_state = self.posteriors[self._last_segment]

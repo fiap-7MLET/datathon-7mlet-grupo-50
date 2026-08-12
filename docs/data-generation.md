@@ -19,7 +19,7 @@ Assim, esta documentação define descreve os *json* `offer_catalog.json`, `offe
 
 ## 1.1. Papel de cada arquivo no projeto (o que é usado onde)
 
-Os três arquivos são gerados através do código `02_generate_synthetic.py` 
+Os três arquivos são gerados através do código `src/datathon/simulator.py`
 
 | Arquivo | Papel no projeto |
 |---|---|---|
@@ -594,10 +594,10 @@ O estado inicial é Beta(1, 1) — distribuição uniforme, o algoritmo não ass
 git clone <repo>
 
 # Instalar dependências (apenas stdlib Python, sem dependências externas)
-python --version  
+python --version
 
 # Gerar os arquivos sintéticos
-python data/synthetic/generate_synthetic.py
+python src/datathon/simulator.py
 
 # Verificar output
 wc -l data/synthetic_enrichment/offer_events.json      # deve ser 200

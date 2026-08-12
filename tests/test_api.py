@@ -31,6 +31,14 @@ def client():
         yield client
 
 
+def test_root_redirects_to_the_demo_page(client):
+    """Quem abre a raiz sem saber da rota /demo não deve bater num 404."""
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert response.headers["location"] == "/demo"
+
+
 def test_health_reports_the_policy_being_served(client):
     body = client.get("/health").json()
 
@@ -46,6 +54,28 @@ def test_recommend_returns_an_offer_for_a_client(client):
     assert body["arm_id"].startswith("arm_")
     assert body["arm_name"]
     assert body["policy"] == "publicada"
+
+
+def test_recommend_reports_the_segment_the_client_activated(client):
+    """`poutcome=success` no payload de teste ativa `previous_converter` — igual ao golden set."""
+    body = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()
+
+    assert body["segment"] == "previous_converter"
+
+
+def test_segment_endpoint_computes_without_recommending(client):
+    """`/segment` é só o passo `atributos → segmento`, sem sortear nem gastar estado."""
+    body = client.post("/segment", json={"age": 68, "job": "retired"}).json()
+
+    assert body["segment"] == "retired"
+
+
+def test_segment_endpoint_matches_what_recommend_used(client):
+    """A prévia de `/segment` tem de bater com o segmento que `/recommend` de fato usou."""
+    segment_preview = client.post("/segment", json=CLIENT_PAYLOAD).json()["segment"]
+    recommendation = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()
+
+    assert segment_preview == recommendation["segment"]
 
 
 def test_the_same_seed_always_returns_the_same_offer(client):
