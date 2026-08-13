@@ -123,6 +123,45 @@ def test_policy_trained_on_arms_missing_from_the_catalog_fails_on_load():
         OfferRecommender(policy_state=stale, catalog=CATALOG)
 
 
+def test_record_outcome_updates_the_belief_for_the_recommended_arm():
+    recommender = OfferRecommender(policy_state=uninformed(), catalog=CATALOG)
+
+    recommender.record_outcome("arm_a", segment=None, reward=1.0)
+
+    belief = recommender.beliefs()
+    arm_a = next(b for b in belief if b.arm_id == "arm_a")
+    assert arm_a.belief == pytest.approx(2 / 3)  # Beta(1,1) + 1 sucesso -> alpha=2, beta=1
+
+
+def test_record_outcome_targets_the_segment_it_was_given_not_the_last_selected_one():
+    """
+    O mesmo contrato que corrige o bug de `_last_segment`: `record_outcome` recebe o
+    segmento de onde a recomendação original veio (ex: de um log de decisão), em vez de
+    confiar em qual foi o último `select_arm` desta instância.
+    """
+    contextual_state = {
+        "algorithm": "contextual_thompson_sampling",
+        "arm_ids": ["arm_a", "arm_b"],
+        "posteriors": {
+            segment: {"arm_a": [1.0, 1.0], "arm_b": [1.0, 1.0]}
+            for segment in (
+                "previous_converter", "student_digital", "retired",
+                "low_engagement", "digital_channel", "general",
+            )
+        },
+    }
+    recommender = OfferRecommender(policy_state=contextual_state, catalog=CATALOG)
+    recommender.recommend(context={"job": "retired"}, seed=1)  # muda o último segmento visto
+    recommender.recommend(context={"job": "student", "contact": "cellular"}, seed=1)
+
+    recommender.record_outcome("arm_a", segment="retired", reward=1.0)
+
+    retired_belief = recommender.beliefs({"segment_override": "retired"})
+    student_belief = recommender.beliefs({"segment_override": "student_digital"})
+    assert next(b for b in retired_belief if b.arm_id == "arm_a").belief == pytest.approx(2 / 3)
+    assert next(b for b in student_belief if b.arm_id == "arm_a").belief == pytest.approx(0.5)
+
+
 def test_without_a_seed_the_policy_explores():
     """Sem seed, o sorteio Thompson varia — é a exploração exigida pela spec."""
     recommender = OfferRecommender(policy_state=uninformed(), catalog=CATALOG)

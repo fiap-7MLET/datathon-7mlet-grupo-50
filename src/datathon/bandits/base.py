@@ -27,8 +27,18 @@ class BanditPolicy(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, arm_id: str, reward: float) -> None:
-        """Atualiza o estado interno da política com a recompensa observada (0 ou 1)."""
+    def update(
+        self, arm_id: str, reward: float, context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Atualiza o estado interno da política com a recompensa observada (0 ou 1).
+
+        `context` é opcional e ignorado pelas políticas não-contextuais. Para políticas
+        contextuais, quem chama fora de uma simulação sequencial (ex: a API, num endpoint de
+        feedback) deve sempre passá-lo explicitamente — sem ele, a política contextual cai
+        para o último segmento visto em `select_arm`, o que não é seguro sob chamadas
+        concorrentes (ver `ContextualThompsonSamplingPolicy.update`).
+        """
         raise NotImplementedError
 
     @abstractmethod

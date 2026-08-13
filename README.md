@@ -190,28 +190,24 @@ dois passos, nessa ordem — Passo 1 de 2 (segmento) acima do Passo 2 de 2 (ofer
 por uma seta na tela — porque é a ordem real da decisão: atributos decidem o segmento, o
 segmento decide a oferta.
 
-1. **Cliente.** Um formulário com 8 campos de **perfil** — idade, ocupação, estado civil,
-   educação, default, financiamento, empréstimo e canal. De propósito, fica de fora:
-   - `month`, `day_of_week`, `campaign` — descrevem o contato em si (quando ele acontece, em
-     que ponto da campanha atual), não um fato sobre o cliente. A API continua aceitando os
-     três para quem chamar `/recommend` diretamente, com o valor padrão do schema.
-   - `previous` e `poutcome` — apesar de serem 2 dos 4 campos que de fato definem o segmento
-     (`context_segment()`), editá-los exigiria explicar a ordem de prioridade das regras na
-     tela (`poutcome` decide antes de tudo; `previous` antes do canal). Em vez disso, ficam
-     **fixos**: herdados do caso golden carregado, ou tratados como "cliente novo"
-     (`previous=0`, `poutcome=unknown`) no modo Personalizado partindo do zero. Só `job` e
-     `contact` — os outros 2 campos decisivos, marcados com **●** — continuam ajustáveis.
+1. **Cliente.** Um formulário com 10 campos de **perfil** — idade, ocupação, estado civil,
+   educação, default, financiamento, empréstimo, canal, contatos anteriores e resultado da
+   campanha anterior. De propósito, fica de fora `month`, `day_of_week` e `campaign`: eles
+   descrevem o contato em si (quando ele acontece, em que ponto da campanha atual), não um
+   fato sobre o cliente. A API continua aceitando os três para quem chamar `/recommend`
+   diretamente, com o valor padrão do schema.
+
+   Os 4 campos marcados com **●** — ocupação, canal, contatos anteriores e resultado da
+   campanha anterior — são exatamente os que `context_segment()` usa para decidir o segmento;
+   os demais aparecem no formulário, mas ainda não influenciam a recomendação com a política
+   atual — mostrado na tela, não escondido: é uma limitação documentada do segmento
+   contextual de hoje, não um bug do formulário.
 
    Os cinco casos golden da Etapa 4 aparecem como *presets* no seletor "Cliente" — escolher
    um preenche o formulário inteiro. Editar qualquer campo troca automaticamente para
    **Personalizado** e o selo muda de `🔒 caso golden set testado` para `🧪 exploração livre
    — fora do golden set`: o formulário continua funcionando, só deixa de ser um caso
    protegido por teste.
-
-   Os demais campos (idade, estado civil, educação, default, financiamento, empréstimo)
-   ainda não influenciam a recomendação com a política atual — mostrado na tela, não
-   escondido: é uma limitação documentada do segmento contextual de hoje, não um bug do
-   formulário.
 2. **Oferta recomendada**, com a crença da política sobre **cada** braço do segmento em
    barras — quanta evidência sustenta cada uma. O botão *Explorar 20×* chama a API 20 vezes
    sem fixar a seed — a política sorteia de verdade a cada chamada — e conta quantas vezes

@@ -34,7 +34,9 @@ class FixedArmPolicy(BanditPolicy):
     def select_arm(self, context: Optional[Dict[str, Any]] = None) -> str:
         return self.fixed_arm
 
-    def update(self, arm_id: str, reward: float) -> None:
+    def update(
+        self, arm_id: str, reward: float, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         # Regra fixa não aprende com o feedback — comportamento esperado.
         pass
 
@@ -63,7 +65,9 @@ class RandomPolicy(BanditPolicy):
     def reseed(self, seed: Optional[int]) -> None:
         self._rng.seed(seed)
 
-    def update(self, arm_id: str, reward: float) -> None:
+    def update(
+        self, arm_id: str, reward: float, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         pass
 
     def to_dict(self) -> Dict[str, Any]:
