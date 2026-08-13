@@ -66,9 +66,22 @@ class ContextualThompsonSamplingPolicy(BanditPolicy):
         }
         return max(samples, key=samples.get)
 
-    def update(self, arm_id: str, reward: float) -> None:
+    def update(
+        self, arm_id: str, reward: float, context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Atualiza o posterior de (segmento, braço) com a recompensa observada.
+
+        Com `context`, o segmento é recalculado dele — o caminho seguro para quem chama
+        `update` bem depois de `select_arm` (ex: um endpoint de feedback, onde outra
+        chamada pode ter sorteado em outro segmento nesse meio-tempo). Sem `context`, cai
+        para `_last_segment`, o segmento da última `select_arm` desta instância — só correto
+        quando as duas chamadas são sequenciais e não concorrentes, como no loop de
+        simulação de treino (`training/simulation.py`).
+        """
         self._check_arm(arm_id)
-        posterior = self.posteriors[self._last_segment][arm_id]
+        segment = context_segment(context) if context is not None else self._last_segment
+        posterior = self.posteriors[segment][arm_id]
         posterior[0] += reward
         posterior[1] += 1 - reward
 

@@ -95,28 +95,24 @@ dois passos, nessa ordem — Passo 1 de 2 (segmento) acima do Passo 2 de 2 (ofer
 por uma seta na tela — porque é a ordem real da decisão: atributos decidem o segmento, o
 segmento decide a oferta.
 
-1. **Cliente.** Um formulário com 8 campos de **perfil** — idade, ocupação, estado civil,
-   educação, default, financiamento, empréstimo e canal. De propósito, fica de fora:
-   - `month`, `day_of_week`, `campaign` — descrevem o contato em si (quando ele acontece, em
-     que ponto da campanha atual), não um fato sobre o cliente. A API continua aceitando os
-     três para quem chamar `/recommend` diretamente, com o valor padrão do schema.
-   - `previous` e `poutcome` — apesar de serem 2 dos 4 campos que de fato definem o segmento
-     (`context_segment()`), editá-los exigiria explicar a ordem de prioridade das regras na
-     tela (`poutcome` decide antes de tudo; `previous` antes do canal). Em vez disso, ficam
-     **fixos**: herdados do caso golden carregado, ou tratados como "cliente novo"
-     (`previous=0`, `poutcome=unknown`) no modo Personalizado partindo do zero. Só `job` e
-     `contact` — os outros 2 campos decisivos, marcados com **●** — continuam ajustáveis.
+1. **Cliente.** Um formulário com 10 campos de **perfil** — idade, ocupação, estado civil,
+   educação, default, financiamento, empréstimo, canal, contatos anteriores e resultado da
+   campanha anterior. De propósito, fica de fora `month`, `day_of_week` e `campaign`: eles
+   descrevem o contato em si (quando ele acontece, em que ponto da campanha atual), não um
+   fato sobre o cliente. A API continua aceitando os três para quem chamar `/recommend`
+   diretamente, com o valor padrão do schema.
+
+   Os 4 campos marcados com **●** — ocupação, canal, contatos anteriores e resultado da
+   campanha anterior — são exatamente os que `context_segment()` usa para decidir o segmento;
+   os demais aparecem no formulário, mas ainda não influenciam a recomendação com a política
+   atual — mostrado na tela, não escondido: é uma limitação documentada do segmento
+   contextual de hoje, não um bug do formulário.
 
    Os cinco casos golden da Etapa 4 aparecem como *presets* no seletor "Cliente" — escolher
    um preenche o formulário inteiro. Editar qualquer campo troca automaticamente para
    **Personalizado** e o selo muda de `🔒 caso golden set testado` para `🧪 exploração livre
    — fora do golden set`: o formulário continua funcionando, só deixa de ser um caso
    protegido por teste.
-
-   Os demais campos (idade, estado civil, educação, default, financiamento, empréstimo)
-   ainda não influenciam a recomendação com a política atual — mostrado na tela, não
-   escondido: é uma limitação documentada do segmento contextual de hoje, não um bug do
-   formulário.
 2. **Oferta recomendada**, com a crença da política sobre **cada** braço do segmento em
    barras — quanta evidência sustenta cada uma. O botão *Explorar 20×* chama a API 20 vezes
    sem fixar a seed — a política sorteia de verdade a cada chamada — e conta quantas vezes
@@ -132,6 +128,34 @@ panos, e dá para conferir no painel "Resposta crua da API", que mostra a URL co
 chamada com `?seed=`.
 
 `GET /policy` expõe a crença em JSON, para quem quiser auditar a decisão sem a página.
+
+### Loop de feedback — `POST /outcome`
+
+`POST /recommend` devolve, além da oferta, um `recommendation_id`. É esse id — não o
+`arm_id` — que fecha o loop: `POST /outcome` recebe `{"recommendation_id": "...",
+"accepted": true|false}` e atualiza o posterior Beta do braço e segmento que aquela
+recomendação específica usou, com `1.0` de recompensa se o cliente aceitou e `0.0` se
+recusou. Cada `recommendation_id` só pode ser resolvido uma vez — a segunda tentativa (ou um
+id desconhecido) devolve `404`, para não contar o mesmo desfecho duas vezes.
+
+O segmento vem de onde a recomendação foi decidida, guardado num log em memória no momento
+do `/recommend` — nunca recalculado do estado atual da política. Isso corrige um bug que
+existia antes deste endpoint: a política contextual guardava o último segmento visto
+(`_last_segment`) e o usaria em `update()`; sob chamadas concorrentes, uma segunda
+recomendação (de outro cliente, outro segmento) podia sobrescrever esse valor antes do
+desfecho da primeira chegar, atualizando o braço errado. `record_outcome()` sempre passa o
+segmento explicitamente agora.
+
+Na página `/demo`, cada recomendação vem com os botões "Cliente aceitou" / "Cliente
+recusou"; clicar chama `/outcome` e redesenha as barras de crença com o posterior já
+atualizado. Como a política publicada tem milhares de observações acumuladas em alguns
+braços (ver `data/processed/policy_state.json`), um clique isolado quase não move o
+posterior nesses casos — por isso a demo também tem "Recusar 20×", que recomenda e recusa 20
+vezes seguidas sem seed, tornando visível a política migrando de braço em segmentos com
+pouca evidência acumulada.
+
+Esse estado atualizado só existe na memória do processo da API — não é regravado em
+`policy_state.json` nem no MLflow (ver "Limitações conhecidas").
 
 ### Reprodutibilidade — o parâmetro `seed`
 
@@ -270,7 +294,7 @@ os limites aqui é mais honesto do que deixar a demo parecer mais sofisticada do
 | `digital_channel` sempre recomenda a mesma oferta (Poupança estudantil) | É o braço vencedor do segmento no `golden_set.json` — não porque o produto faça sentido para o perfil, mas porque o catálogo simulado (`offer_catalog.json`) não restringe elegibilidade por idade/ocupação; o multiplicador de segmento é a única coisa que discrimina os braços. | Adicionar regras de elegibilidade por produto no catálogo (ex.: "Poupança estudantil" exige `job=student`), para que o bandit escolha apenas entre ofertas plausíveis para aquele perfil. |
 | ~82% dos clientes caem no segmento `low_engagement`, um "balde" único | `previous == 0` cobre a maior parte da base amostrada; é a primeira regra de exclusão a disparar para quem nunca converteu antes. Reproduzido na seção 11 do `notebooks/03_baseline_e_thompson_sampling.ipynb`: segmentar traz uma diferença agregada de conversão pequena (~0,04%) sobre o Thompson global, porque um segmento dominante domina a média. | Quebrar `low_engagement` em sub-segmentos (ex.: por faixa etária, educação ou mês de contato) para que a maioria da base também se beneficie da personalização, não só as minorias (`student_digital`, `retired`, `digital_channel`). |
 | Os 6 segmentos são mutuamente exclusivos, por prioridade de regra | Um cliente que é `retired` **e** `student_digital` **e** teria `previous_converter` só conta para o primeiro que casar na cadeia `if/elif` — as outras evidências são descartadas, não combinadas. | Modelo aditivo (ex.: features binárias por regra, com um bandit linear) em vez de segmento único, para não perder informação de clientes que ativam mais de uma regra. |
-| Sem *feedback loop* real | A API só serve inferência sobre um `policy_state.json` congelado no treino; não existe endpoint para registrar o desfecho real de uma recomendação e atualizar o posterior em produção. | Adicionar um endpoint de feedback (ex.: `POST /outcome`) que atualize `alpha`/`beta` do segmento e braço servidos, com persistência do estado entre chamadas. |
+| O loop de feedback só vive na memória do processo | `POST /outcome` (ver "Loop de feedback" abaixo) já atualiza `alpha`/`beta` do segmento e braço servidos, mas só no objeto em memória — nada é regravado em disco/MLflow. Reiniciar a API volta para a política publicada, e múltiplas réplicas (ex.: várias tasks ECS) não compartilhariam esse aprendizado entre si. | Persistir o estado atualizado (ex.: reescrever `policy_state.json` com lock, ou mover para um store compartilhado) para que o aprendizado online sobreviva a um restart e escale além de um único processo. |
 | Catálogo de 8 das 9 ofertas é estimativa de negócio, não medida | O dataset Kaggle mede conversão real para **um** produto (depósito a prazo); as taxas base e multiplicadores das outras 8 ofertas em `offer_catalog.json` foram definidos por julgamento de negócio, não observados. | Validar (ou recalibrar) os parâmetros do catálogo com um piloto controlado antes de qualquer decisão real; tratar os números atuais como hipótese, não medição. |
 
 

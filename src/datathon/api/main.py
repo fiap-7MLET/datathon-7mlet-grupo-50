@@ -17,6 +17,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, Optional
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -66,6 +67,13 @@ class ClientFeatures(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
+    recommendation_id: str = Field(
+        description=(
+            "Identifica esta decisão. Envie de volta em POST /outcome quando souber o "
+            "desfecho — é o que liga o feedback ao braço e segmento certos, sem depender de "
+            "estado implícito da política."
+        )
+    )
     arm_id: str = Field(description="Identificador do braço recomendado no catálogo.")
     arm_name: str = Field(description="Nome de negócio da oferta.")
     channel: str | list[str] | None = Field(
@@ -81,6 +89,18 @@ class RecommendationResponse(BaseModel):
     contextual: Literal[True] = Field(
         default=True, description="Os atributos do cliente influenciam a escolha da oferta."
     )
+
+
+class OutcomeRequest(BaseModel):
+    recommendation_id: str = Field(description="O id devolvido por POST /recommend.")
+    accepted: bool = Field(description="O cliente aceitou a oferta recomendada?")
+
+
+class OutcomeResponse(BaseModel):
+    recommendation_id: str
+    arm_id: str = Field(description="Braço cujo posterior foi atualizado.")
+    segment: Optional[str] = Field(description="Segmento cujo posterior foi atualizado.")
+    reward: float = Field(description="Recompensa aplicada (1.0 aceitou, 0.0 recusou).")
 
 
 class SegmentResponse(BaseModel):
@@ -140,6 +160,15 @@ async def lifespan(app: FastAPI):
         "n_arms": len(policy_state["arm_ids"]),
         "trained_on_n_clients": policy_state.get("trained_on_n_clients"),
     }
+    app_state["decisions"] = {}
+    """
+    Recomendações à espera de desfecho: recommendation_id -> {arm_id, segment}.
+
+    Em memória, de propósito — este processo é o único a servir a política, e o objetivo é
+    fechar o loop exploração/explotação ao vivo na demo, não sobreviver a um restart. Uma
+    entrada some assim que POST /outcome a resolve (pop), então o dicionário só cresce com
+    recomendações ainda sem resposta.
+    """
 
     logger.info(
         "API pronta: política '%s' (%s braços) carregada de %s.",
@@ -245,19 +274,61 @@ def recommend(
     recommender = _recommender()
 
     recommendation = recommender.recommend(context=client.model_dump(), seed=seed)
+    recommendation_id = uuid4().hex
+    app_state["decisions"][recommendation_id] = {
+        "arm_id": recommendation.arm_id,
+        "segment": recommendation.segment,
+    }
     logger.info(
-        "Recomendação para cliente (job=%s, contact=%s): %s",
+        "Recomendação %s para cliente (job=%s, contact=%s): %s",
+        recommendation_id,
         client.job,
         client.contact,
         recommendation.arm_id,
     )
     return RecommendationResponse(
+        recommendation_id=recommendation_id,
         arm_id=recommendation.arm_id,
         arm_name=recommendation.arm_name,
         channel=recommendation.channel,
         score=recommendation.score,
         segment=recommendation.segment,
         algorithm=app_state["policy_meta"]["algorithm"],
+    )
+
+
+@app.post("/outcome", response_model=OutcomeResponse)
+def outcome(body: OutcomeRequest) -> OutcomeResponse:
+    """
+    Fecha o loop: registra se o cliente aceitou ou não a oferta e atualiza o posterior do
+    braço/segmento servidos — é isso que faz a próxima chamada explorar/explotar de novo em
+    cima de evidência real, e não só da política congelada no treino.
+
+    `recommendation_id` só pode ser resolvido uma vez: a segunda tentativa (ou um id que
+    nunca existiu) devolve 404, em vez de contar o mesmo desfecho duas vezes.
+    """
+    recommender = _recommender()
+    decision = app_state["decisions"].pop(body.recommendation_id, None)
+    if decision is None:
+        raise HTTPException(
+            status_code=404,
+            detail="recommendation_id desconhecido, ou o desfecho dele já foi registrado.",
+        )
+
+    reward = 1.0 if body.accepted else 0.0
+    recommender.record_outcome(decision["arm_id"], decision["segment"], reward)
+    logger.info(
+        "Desfecho %s: braço %s (segmento %s) — %s",
+        body.recommendation_id,
+        decision["arm_id"],
+        decision["segment"],
+        "aceitou" if body.accepted else "recusou",
+    )
+    return OutcomeResponse(
+        recommendation_id=body.recommendation_id,
+        arm_id=decision["arm_id"],
+        segment=decision["segment"],
+        reward=reward,
     )
 
 

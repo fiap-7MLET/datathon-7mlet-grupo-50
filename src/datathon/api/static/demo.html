@@ -9,11 +9,16 @@
 
   Sem dependências externas de propósito: a apresentação pode acontecer numa sala sem
   internet, e uma CDN fora do ar não pode derrubar a demo. Tudo o que ela mostra vem da
-  própria API (/personas, /policy, /segment, /recommend) — nada de dado embutido, e nenhuma
-  regra de negócio duplicada aqui: até o segmento do cliente é calculado pelo backend, para
-  a tela nunca discordar do que o serviço realmente decide.
+  própria API (/personas, /policy, /segment, /recommend, /outcome) — nada de dado embutido, e
+  nenhuma regra de negócio duplicada aqui: até o segmento do cliente é calculado pelo
+  backend, para a tela nunca discordar do que o serviço realmente decide.
 
-  A demo serve sempre a política publicada (20.000 clientes) — sem seletor de crença.
+  A demo parte sempre da política publicada (20.000 clientes) — sem seletor de crença. A
+  partir daí, o feedback dado nesta tela ("Cliente aceitou" / "Cliente recusou" e "Recusar
+  20×") atualiza o posterior em memória do processo que está servindo a API: é o loop de
+  exploração/explotação fechando ao vivo, não mais um estado congelado no treino. Reiniciar a
+  API volta à política publicada — nada disso é persistido em disco (ver README, "Loop de
+  feedback").
 -->
 <style>
   :root {
@@ -99,12 +104,12 @@
     <p class="persona-desc" id="persona-desc"></p>
 
     <div class="field-grid" id="field-grid"></div>
-    <p class="legend"><span class="dot"></span> define o segmento com a política atual — os demais campos descrevem o cliente, mas não mudam a recomendação hoje.</p>
-    <p class="legend">"Contatos anteriores" e "resultado da campanha anterior" também definem o segmento, mas ficam fixos aqui — como um cliente novo, ou herdados do caso golden carregado. Para ver os que dependem deles (ex: quem já converteu antes), use os presets no menu "Cliente".</p>
+    <p class="legend"><span class="dot"></span> um dos 4 campos que define o segmento com a política atual — os demais campos descrevem o cliente, mas não mudam a recomendação hoje.</p>
 
     <div class="row" style="margin-top:1.1rem">
       <button id="go">Recomendar</button>
       <button id="explore" class="ghost" title="Chama sem seed 20 vezes e conta as ofertas">Explorar 20×</button>
+      <button id="reject20" class="ghost" title="Recomenda e recusa 20 vezes seguidas, sem seed, para mostrar a política migrando de braço">Recusar 20×</button>
     </div>
   </div>
 
@@ -130,6 +135,12 @@
       crença na conversão: <span class="belief" id="offer-score"></span>
       <span id="offer-policy"></span>
     </p>
+    <div class="row" style="margin-top:.9rem;align-items:center">
+      <span class="muted" style="font-size:.82rem">O cliente respondeu a esta oferta:</span>
+      <button id="accept" class="ghost" disabled>Cliente aceitou</button>
+      <button id="reject" class="ghost" disabled>Cliente recusou</button>
+      <span class="muted" id="feedback-status" style="font-size:.82rem"></span>
+    </div>
     <p id="explore-out" class="muted" style="margin:.6rem 0 0"></p>
   </div>
 
@@ -160,6 +171,8 @@ const obs = (v) => v == null ? "—" : Math.round(v).toLocaleString("pt-BR");
 let personas = [];
 let calls = 0;
 let lastArm = null;
+let lastRecommendation = null;
+let feedbackResolved = false;
 
 /**
  * Seed usada pela chamada atual. Não aparece na tela — é um parâmetro técnico de
@@ -183,20 +196,17 @@ function flash(el) {
 const POLICY_LABEL = "publicada (20.000 clientes)";
 
 /**
- * Os 8 campos de "perfil do cliente" editáveis na tela — o que já estaria no cadastro do
- * banco antes de qualquer contato (ver README, "Página de demonstração"). De propósito, o
- * formulário NÃO inclui `month`, `day_of_week` nem `campaign`: esses três descrevem o
- * contato em si (quando ele acontece, em que ponto da campanha), não um fato sobre o
- * cliente. A API continua aceitando os três (com default) para quem chamar `/recommend`
- * diretamente.
+ * Campos de "perfil do cliente" editáveis na tela — o que já estaria no cadastro do banco
+ * antes de qualquer contato, mais os 2 campos de histórico que `context_segment()` também
+ * usa (ver README, "Página de demonstração"). Os 4 campos marcados `decisive: true` (●) são
+ * exatamente os que `context_segment()` lê para decidir o segmento — os demais (idade,
+ * estado civil, educação, default, financiamento, empréstimo) não influenciam a recomendação
+ * com a política atual.
  *
- * Também não inclui `previous` e `poutcome`, apesar de serem 2 dos 4 campos que
- * `context_segment()` de fato usa — ver `BASE_CLIENT` logo abaixo: eles ficam fixos, não
- * removidos, herdados do caso golden carregado (ou do padrão "cliente novo" no modo
- * Personalizado). Manter os dois ajustáveis exigiria explicar, na tela, a ordem de
- * prioridade das regras de segmento (`poutcome` decide antes de tudo, `previous` antes do
- * canal) — informação demais para o que a tela quer mostrar. `job` e `contact`, os outros 2
- * campos decisivos, continuam livres.
+ * De propósito, o formulário NÃO inclui `month`, `day_of_week` nem `campaign`: esses três
+ * descrevem o contato em si (quando ele acontece, em que ponto da campanha), não um fato
+ * sobre o cliente. A API continua aceitando os três (com default) para quem chamar
+ * `/recommend` diretamente.
  */
 const FIELD_DEFS = [
   { key: "age", label: "Idade", type: "number", min: 18, max: 120 },
@@ -213,16 +223,12 @@ const FIELD_DEFS = [
   { key: "housing", label: "Financiamento imob.", type: "select", options: ["unknown", "no", "yes"] },
   { key: "loan", label: "Empréstimo pessoal", type: "select", options: ["unknown", "no", "yes"] },
   { key: "contact", label: "Canal de contato", type: "select", decisive: true, options: ["unknown", "cellular", "telephone"] },
+  { key: "previous", label: "Contatos anteriores", type: "number", min: 0, max: 7, decisive: true },
+  { key: "poutcome", label: "Resultado da campanha anterior", type: "select", decisive: true, options: ["unknown", "nonexistent", "failure", "success"] },
 ];
 
-/**
- * `previous` e `poutcome` fora do formulário, mas ainda entram na chamada — herdados do
- * caso golden carregado (`loadPersona()`) ou deste padrão neutro (modo Personalizado "do
- * zero"): um cliente sem histórico, equivalente a `low_engagement` até `job`/`contact`
- * apontarem `student_digital` ou `retired`.
- */
+/** Estado de um cliente novo, nunca contatado — ponto de partida do modo Personalizado "do zero". */
 const NEW_CLIENT_DEFAULTS = { previous: 0, poutcome: "unknown" };
-let baseClient = { ...NEW_CLIENT_DEFAULTS };
 
 /** Legenda de apoio ao painel de segmento — só texto explicativo, a decisão vem da API. */
 const SEGMENT_EXPLAIN = {
@@ -246,7 +252,7 @@ function buildFieldGrid() {
 }
 
 function readForm() {
-  const client = { ...baseClient };
+  const client = {};
   FIELD_DEFS.forEach((f) => {
     const el = $(`f-${f.key}`);
     client[f.key] = f.type === "number" ? Number(el.value) : el.value;
@@ -290,7 +296,6 @@ async function boot() {
 function loadPersona() {
   const persona = personas[$("persona").value];
   writeForm(persona.client);
-  baseClient = { previous: persona.client.previous, poutcome: persona.client.poutcome };
   currentSeed = persona.seed;
   $("persona-desc").textContent = persona.descricao;
   updateGoldenStatus();
@@ -321,11 +326,10 @@ function renderSegment(segmentName) {
   $("segment-name").textContent = segmentName;
   $("segment-why").textContent = `— ${SEGMENT_EXPLAIN[segmentName] ?? ""}`;
   $("segment-limits").textContent =
-    "Ocupação e canal (marcados com ●) são os únicos campos ajustáveis que mudam este "
-    + "resultado hoje — contatos anteriores e resultado da campanha anterior também definem "
-    + "o segmento, mas estão fixos (ver nota acima do formulário). Mudar idade, estado civil "
-    + "ou educação não afeta a recomendação com a política atual — é uma limitação "
-    + "documentada, não uma falha do formulário.";
+    "Ocupação, canal, contatos anteriores e resultado da campanha anterior (marcados com ●) "
+    + "são os 4 campos que definem este resultado hoje. Mudar idade, estado civil, educação, "
+    + "default, financiamento ou empréstimo não afeta a recomendação com a política atual — "
+    + "é uma limitação documentada, não uma falha do formulário.";
   $("segment-card").hidden = false;
   $("step-connector").hidden = false;
   flash($("segment-card"));
@@ -347,6 +351,10 @@ async function recommend(useSeed = true) {
   const seeded = query.has("seed");
   const repeated = result.arm_id === lastArm;
   lastArm = result.arm_id;
+  lastRecommendation = result;
+  feedbackResolved = false;
+  setFeedbackButtonsEnabled(true);
+  $("feedback-status").textContent = "";
 
   $("callinfo").innerHTML =
     `chamada <b>#${calls}</b> · ${new Date().toLocaleTimeString("pt-BR")} · `
@@ -398,6 +406,66 @@ async function renderPolicy(chosenArm, segmentName) {
   $("policy-card").hidden = false;
 }
 
+function setFeedbackButtonsEnabled(enabled) {
+  $("accept").disabled = !enabled;
+  $("reject").disabled = !enabled;
+}
+
+/** Registra o desfecho da recomendação atual e mostra o posterior já atualizado. */
+async function sendOutcome(recommendationId, accepted) {
+  const result = await api("/outcome", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recommendation_id: recommendationId, accepted }),
+  });
+  await renderPolicy(lastRecommendation.arm_id, lastRecommendation.segment);
+  flash($("policy-card"));
+  return result;
+}
+
+async function onFeedbackClick(accepted) {
+  if (!lastRecommendation || feedbackResolved) return;
+  setFeedbackButtonsEnabled(false);
+  try {
+    await sendOutcome(lastRecommendation.recommendation_id, accepted);
+    feedbackResolved = true;
+    $("feedback-status").textContent = accepted
+      ? "✓ registrado: cliente aceitou — evidência a favor deste braço."
+      : "✓ registrado: cliente recusou — evidência contra este braço.";
+  } catch (err) {
+    fail(err);
+    setFeedbackButtonsEnabled(true);
+  }
+}
+
+/**
+ * Simula 20 clientes seguidos recusando a oferta, sem seed — cada rodada recomenda de
+ * verdade e registra a recusa antes da próxima, então a política vai mesmo se afastando do
+ * braço vencedor, não é só uma animação. É a forma mais rápida de tornar visível o que um
+ * clique isolado em "Cliente recusou" normalmente não move.
+ */
+async function rejectRepeatedly() {
+  $("reject20").disabled = true;
+  const before = lastRecommendation ? lastRecommendation.arm_id : null;
+  const counts = {};
+  try {
+    for (let i = 0; i < 20; i++) {
+      const result = await recommend(false);
+      counts[result.arm_id] = (counts[result.arm_id] ?? 0) + 1;
+      await sendOutcome(result.recommendation_id, false);
+      feedbackResolved = true;
+    }
+    setFeedbackButtonsEnabled(false);
+    $("feedback-status").textContent = "✓ 20 recusas registradas.";
+    const after = lastRecommendation.arm_id;
+    const summary = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([arm, n]) => `${arm}: ${n}`).join(" · ");
+    $("explore-out").textContent = `20 recomendações recusadas em sequência → ${summary}`
+      + (before && before !== after ? ` — a política migrou de ${before} para ${after}` : ` — braço vencedor não mudou`);
+  } catch (err) { fail(err); } finally { $("reject20").disabled = false; }
+}
+
 async function explore() {
   $("explore").disabled = true;
   try {
@@ -415,7 +483,7 @@ async function explore() {
 
 $("persona").addEventListener("change", () => {
   if ($("persona").value === "custom") {
-    baseClient = { ...NEW_CLIENT_DEFAULTS };
+    writeForm(NEW_CLIENT_DEFAULTS);
     currentSeed = DEFAULT_CUSTOM_SEED;
     $("persona-desc").textContent = "Perfil personalizado — edite os campos abaixo.";
     updateGoldenStatus();
@@ -426,6 +494,9 @@ $("persona").addEventListener("change", () => {
 });
 $("go").addEventListener("click", () => recommend().catch(fail));
 $("explore").addEventListener("click", explore);
+$("reject20").addEventListener("click", rejectRepeatedly);
+$("accept").addEventListener("click", () => onFeedbackClick(true));
+$("reject").addEventListener("click", () => onFeedbackClick(false));
 boot();
 </script>
 </body>

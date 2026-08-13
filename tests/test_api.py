@@ -127,6 +127,48 @@ def test_the_chosen_arm_is_the_one_the_policy_believes_most_in(client):
     assert recommended == top_arm["arm_id"]
 
 
+def test_recommend_returns_a_recommendation_id(client):
+    body = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()
+
+    assert body["recommendation_id"]
+
+
+def test_outcome_updates_the_belief_for_the_recommended_arm(client):
+    """Fecha o loop: aceitar reforça a crença no braço servido — o que a demo mostra na hora."""
+    recommendation = client.post("/recommend?seed=42", json=CLIENT_PAYLOAD).json()
+    before = client.get(f"/policy?segment={recommendation['segment']}").json()
+    before_belief = next(a for a in before["arms"] if a["arm_id"] == recommendation["arm_id"])
+
+    response = client.post(
+        "/outcome",
+        json={"recommendation_id": recommendation["recommendation_id"], "accepted": True},
+    )
+    after = client.get(f"/policy?segment={recommendation['segment']}").json()
+    after_belief = next(a for a in after["arms"] if a["arm_id"] == recommendation["arm_id"])
+
+    assert response.status_code == 200
+    assert response.json()["reward"] == 1.0
+    assert after_belief["observations"] == pytest.approx(before_belief["observations"] + 1)
+    assert after_belief["belief"] >= before_belief["belief"]
+
+
+def test_outcome_cannot_be_registered_twice_for_the_same_recommendation(client):
+    recommendation = client.post("/recommend?seed=1", json=CLIENT_PAYLOAD).json()
+    payload = {"recommendation_id": recommendation["recommendation_id"], "accepted": False}
+
+    first = client.post("/outcome", json=payload)
+    second = client.post("/outcome", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 404
+
+
+def test_outcome_rejects_an_unknown_recommendation_id(client):
+    response = client.post("/outcome", json={"recommendation_id": "nunca-existiu", "accepted": True})
+
+    assert response.status_code == 404
+
+
 def test_personas_match_the_golden_cases(client):
     """A demo só oferece casos que o golden set protege."""
     from datathon.evaluation.evaluator import GOLDEN_CLIENTS

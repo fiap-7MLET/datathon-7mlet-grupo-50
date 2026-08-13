@@ -44,7 +44,9 @@ class UCB1Policy(BanditPolicy):
             scores[aid] = mean + bonus
         return max(scores, key=scores.get)
 
-    def update(self, arm_id: str, reward: float) -> None:
+    def update(
+        self, arm_id: str, reward: float, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         self._check_arm(arm_id)
         self.counts[arm_id] += 1
         self.sums[arm_id] += reward

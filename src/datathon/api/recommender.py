@@ -71,6 +71,19 @@ class OfferRecommender:
             segment=self.segment_for(context),
         )
 
+    def record_outcome(self, arm_id: str, segment: str | None, reward: float) -> None:
+        """
+        Atualiza o posterior do braço servido com o desfecho real (aceitou/recusou).
+
+        `segment` vem de onde a recomendação foi decidida (o log da chamada original),
+        nunca recalculado do estado atual da instância — é o que evita o bug de depender de
+        `_last_segment`, que uma chamada concorrente pode ter sobrescrito nesse meio-tempo.
+        Passado como `segment_override` porque é isso que `context_segment()` já sabe
+        respeitar sem duplicar a lógica de segmentação aqui.
+        """
+        context = {"segment_override": segment} if segment is not None else None
+        self._policy.update(arm_id, reward, context=context)
+
     def segment_for(self, context: Dict[str, Any] | None = None) -> str | None:
         """
         Segmento que este contexto ativa, sem sortear nem alterar estado.
