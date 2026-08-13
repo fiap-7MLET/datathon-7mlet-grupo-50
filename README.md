@@ -1,4 +1,4 @@
-# datathon-7mlet-grupo-50 — Plataforma de Ofertas Adaptativas
+# datathon-7mlet-grupo-58 — Plataforma de Ofertas Adaptativas
 
 Datathon 7MLET. **Visão do problema:** experimentação adaptativa para ofertas bancárias
 usando multi-armed bandit.
