@@ -249,6 +249,8 @@ mlflow.db
 
 # Relatórios gerados (uv run datathon-evaluate)
 reports/
+!reports/
+!reports/etapa4_avaliacao.md
 
 # Material de trabalho e estudo individual — não faz parte da entrega do grupo
 # As decisões que importam estão consolidadas no README, como a spec do datathon pede;

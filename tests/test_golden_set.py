@@ -80,7 +80,17 @@ def test_golden_set_has_the_five_cases_the_spec_asks_for(any_golden):
 
     assert len(cases) == 5
     assert len({case["case_id"] for case in cases}) == 5, "case_id duplicado"
-    assert len({case["seed"] for case in cases}) == 5, "seeds repetidas escondem casos"
+
+
+def test_golden_cases_share_the_same_seed(any_golden):
+    """
+    De propósito: seed diferente por caso permitiria confundir "mudou de oferta por causa
+    do perfil" com "mudou por causa do sorteio". Com uma seed só, a única variável que resta
+    entre os 5 casos é o segmento — ver docstring de `client_personas.py`.
+    """
+    cases = any_golden["cases"]
+
+    assert len({case["seed"] for case in cases}) == 1, "seeds deveriam ser todas iguais"
 
 
 def test_each_golden_case_reproduces_its_frozen_recommendation(golden, policy_state, catalog):
@@ -90,7 +100,9 @@ def test_each_golden_case_reproduces_its_frozen_recommendation(golden, policy_st
     recommender = OfferRecommender(policy_state=policy_state, catalog=catalog)
 
     obtained = {
-        case["case_id"]: recommender.recommend(seed=case["seed"]).arm_id for case in golden["cases"]
+        case["case_id"]: recommender.recommend(
+            context=case["client"], seed=case["seed"]
+        ).arm_id for case in golden["cases"]
     }
     expected = {case["case_id"]: case["expected"]["arm_id"] for case in golden["cases"]}
 
@@ -107,24 +119,20 @@ def test_the_learning_snapshot_reproduces_from_its_own_embedded_policy(learning_
     )
 
     obtained = [
-        recommender.recommend(seed=case["seed"]).arm_id for case in learning_golden["cases"]
+        recommender.recommend(context=case["client"], seed=case["seed"]).arm_id
+        for case in learning_golden["cases"]
     ]
 
     assert obtained == [case["expected"]["arm_id"] for case in learning_golden["cases"]]
 
 
-def test_the_published_policy_has_stopped_exploring(golden):
+def test_the_published_policy_personalizes(golden):
     """
-    Documenta o fato incômodo em vez de escondê-lo: com 20.000 clientes de treino os cinco
-    casos recebem a mesma oferta. É convergência, não bug — e quem for gravar a demo
-    precisa saber antes, não durante.
+    Perfis de segmentos distintos devem demonstrar personalização no artefato publicado.
     """
     arms = {case["expected"]["arm_id"] for case in golden["cases"]}
 
-    assert len(arms) == 1, (
-        "A política publicada voltou a explorar. Bom sinal — mas o roteiro da demo e o "
-        "relatório da Etapa 4 falam em convergência para um único braço. " + REGENERATE
-    )
+    assert len(arms) > 1, "Perfis distintos deveriam produzir mais de uma oferta. " + REGENERATE
 
 
 def test_the_learning_snapshot_still_explores(learning_golden):
@@ -147,10 +155,9 @@ def test_golden_recommendations_carry_valid_catalog_offers(any_golden, catalog):
         assert case["expected"]["arm_name"] == arms[arm_id]["name"]
 
 
-def test_golden_set_states_that_the_policy_is_not_contextual(any_golden):
+def test_golden_set_states_that_the_policy_is_contextual(any_golden):
     """
-    Documental, e de propósito: o arquivo será lido por gente do time e pela banca. Se os
-    cinco casos vierem com a mesma oferta, tem de estar escrito ali por quê (ver README, “Escolhas de design”).
+    O arquivo registra explicitamente que o perfil participa da decisão.
     """
-    assert any_golden["contextual"] is False
-    assert "seed" in any_golden["nota"]
+    assert any_golden["contextual"] is True
+    assert "contextual" in any_golden["nota"]

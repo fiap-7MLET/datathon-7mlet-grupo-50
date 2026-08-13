@@ -78,6 +78,35 @@ def test_recommendation_carries_the_offer_details_and_belief():
     assert recommendation.score == pytest.approx(0.998, abs=1e-3)
 
 
+def test_non_contextual_policy_has_no_segment():
+    """Thompson não-contextual não segmenta — o campo existe, mas vem vazio."""
+    recommender = OfferRecommender(policy_state=uninformed(), catalog=CATALOG)
+
+    recommendation = recommender.recommend(seed=1)
+
+    assert recommendation.segment is None
+    assert recommender.segment_for({"job": "retired"}) is None
+
+
+def test_contextual_policy_exposes_the_segment_the_context_activated():
+    """`segment_for` é a mesma regra que decide o braço — auditável antes de recomendar."""
+    contextual_state = {
+        "algorithm": "contextual_thompson_sampling",
+        "arm_ids": ["arm_a", "arm_b"],
+        "posteriors": {
+            segment: {"arm_a": [1.0, 1.0], "arm_b": [1.0, 1.0]}
+            for segment in (
+                "previous_converter", "student_digital", "retired",
+                "low_engagement", "digital_channel", "general",
+            )
+        },
+    }
+    recommender = OfferRecommender(policy_state=contextual_state, catalog=CATALOG)
+
+    assert recommender.segment_for({"job": "retired"}) == "retired"
+    assert recommender.recommend(context={"job": "retired"}, seed=1).segment == "retired"
+
+
 def test_policy_trained_on_arms_missing_from_the_catalog_fails_on_load():
     """
     Política e catálogo têm de estar em sincronia. Se a política conhece um braço que o

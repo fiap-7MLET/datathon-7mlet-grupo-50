@@ -4,7 +4,7 @@
 > **Shape raw:** 41.188 linhas × 21 colunas  
 > **Variável target:** `y` — adesão a depósito a prazo (yes/no)  
 > **Separador CSV:** `;`  
-> **Pipeline:** `BankMarketingPreprocessor` (`src/01_data_loader.py`)
+> **Pipeline:** `BankMarketingPreprocessor` (`src/datathon/data_loader.py`)
 > **EDA:** `notebooks/01_eda.ipynb`
 
 ---

@@ -9,8 +9,14 @@
 
   Sem dependências externas de propósito: a apresentação pode acontecer numa sala sem
   internet, e uma CDN fora do ar não pode derrubar a demo. Tudo o que ela mostra vem da
-  própria API (/personas, /policy, /recommend) — nada de dado embutido, para que a tela
-  nunca discorde do que o serviço realmente responde.
+  própria API (/personas, /policy, /segment, /recommend) — nada de dado embutido, e nenhuma
+  regra de negócio duplicada aqui: até o segmento do cliente é calculado pelo backend, para
+  a tela nunca discordar do que o serviço realmente decide.
+
+  A demo serve sempre a política publicada (20.000 clientes) — sem seletor de crença. O
+  snapshot "em aprendizado" (500 clientes) continua existindo no backend, testado, como
+  evidência de exploração da Etapa 4; só não aparece mais aqui, para não exigir explicar duas
+  políticas numa apresentação de 5 minutos.
 -->
 <style>
   :root {
@@ -30,10 +36,11 @@
   .sub { color: var(--dim); margin: 0 0 1.5rem; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
   .row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; }
-  label { display: block; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin-bottom: .3rem; }
+  .row.between { justify-content: space-between; align-items: center; }
+  label { display: flex; align-items: center; gap: .3rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin-bottom: .3rem; }
   select, input {
     background: var(--bg); color: var(--ink); border: 1px solid var(--line);
-    border-radius: 8px; padding: .5rem .6rem; font: inherit; min-width: 6rem;
+    border-radius: 8px; padding: .5rem .6rem; font: inherit; min-width: 6rem; width: 100%;
   }
   button {
     background: var(--accent); color: #fff; border: 0; border-radius: 8px;
@@ -42,9 +49,18 @@
   button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-weight: 400; }
   button:disabled { opacity: .5; cursor: default; }
   .persona-desc { color: var(--dim); font-size: .9rem; margin-top: .75rem; }
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: .7rem 1rem; margin-top: 1rem; }
+  .field.decisive select, .field.decisive input { border-color: var(--accent); }
+  .dot { width: .42rem; height: .42rem; border-radius: 50%; background: var(--accent); flex: none; display: inline-block; }
+  .legend { color: var(--dim); font-size: .82rem; margin: .8rem 0 0; display: flex; align-items: center; gap: .4rem; }
+  .status-pill { font-size: .74rem; font-weight: 600; padding: .25rem .65rem; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+  .status-pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+  .status-pill.warn { color: var(--warm); border-color: color-mix(in srgb, var(--warm) 45%, var(--line)); }
+  .step-connector { text-align: center; color: var(--dim); font-size: 1.15rem; line-height: 1; margin: -.35rem 0 .65rem; }
   .offer { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; }
   .offer-name { font-size: 1.6rem; font-weight: 650; }
   .pill { border: 1px solid var(--line); border-radius: 999px; padding: .15rem .7rem; font-size: .82rem; color: var(--dim); }
+  .pill.accent { background: var(--accent); color: #fff; border: 0; font-weight: 700; font-size: .95rem; padding: .3rem .85rem; }
   .belief { color: var(--good); font-weight: 600; }
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); font-weight: 500; padding-bottom: .5rem; }
@@ -73,30 +89,40 @@
 <body>
 <main>
   <h1>Plataforma de Ofertas Adaptativas</h1>
-  <p class="sub">Multi-armed bandit (Thompson Sampling) decidindo qual oferta apresentar. Datathon 7MLET — grupo 50.</p>
+  <p class="sub">Multi-armed bandit (Thompson Sampling contextual) decidindo qual oferta apresentar. Datathon 7MLET — grupo 50.</p>
 
   <div class="card">
-    <div class="row">
-      <div>
+    <div class="row between">
+      <div style="min-width:14rem">
         <label for="persona">Cliente</label>
         <select id="persona"></select>
       </div>
-      <div>
-        <label for="seed">Seed</label>
-        <input id="seed" type="number" style="width:7rem">
-      </div>
-      <div>
-        <label for="policy">Crença</label>
-        <select id="policy"></select>
-      </div>
+      <span class="status-pill" id="golden-status"></span>
+    </div>
+    <p class="persona-desc" id="persona-desc"></p>
+
+    <div class="field-grid" id="field-grid"></div>
+    <p class="legend"><span class="dot"></span> define o segmento com a política atual — os demais campos descrevem o cliente, mas não mudam a recomendação hoje.</p>
+    <p class="legend">"Contatos anteriores" e "resultado da campanha anterior" também definem o segmento, mas ficam fixos aqui — como um cliente novo, ou herdados do caso golden carregado. Para ver os que dependem deles (ex: quem já converteu antes), use os presets no menu "Cliente".</p>
+
+    <div class="row" style="margin-top:1.1rem">
       <button id="go">Recomendar</button>
       <button id="explore" class="ghost" title="Chama sem seed 20 vezes e conta as ofertas">Explorar 20×</button>
     </div>
-    <p class="persona-desc" id="persona-desc"></p>
   </div>
 
+  <div class="card" id="segment-card" hidden style="margin-bottom:.3rem">
+    <h2>Passo 1 de 2 <span class="muted" style="font-weight:400">— a que segmento este cliente pertence</span></h2>
+    <p class="offer" style="margin:0">
+      <span class="pill accent" id="segment-name"></span>
+      <span class="muted" id="segment-why"></span>
+    </p>
+    <p class="note" id="segment-limits" style="margin-top:.9rem"></p>
+  </div>
+  <div class="step-connector" id="step-connector" hidden>↓</div>
+
   <div class="card" id="result-card" hidden>
-    <h2>Oferta recomendada</h2>
+    <h2>Passo 2 de 2 <span class="muted" style="font-weight:400">— oferta que esse segmento recebe</span></h2>
     <p class="callinfo" id="callinfo"></p>
     <div class="offer">
       <span class="offer-name" id="offer-name"></span>
@@ -111,7 +137,7 @@
   </div>
 
   <div class="card" id="policy-card" hidden>
-    <h2>Por que essa oferta — a crença sobre cada braço</h2>
+    <h2>Por que essa oferta — a crença sobre cada braço no segmento</h2>
     <table>
       <thead><tr><th>oferta</th><th style="width:38%"></th><th class="num">crença</th><th class="num">evidência</th></tr></thead>
       <tbody id="arms"></tbody>
@@ -138,6 +164,18 @@ let personas = [];
 let calls = 0;
 let lastArm = null;
 
+/**
+ * Seed usada pela chamada atual. Não aparece na tela — é um parâmetro técnico de
+ * reprodutibilidade (ver README, "Reprodutibilidade"), não uma alavanca de negócio, e
+ * mostrar um número que ninguém pode explicar só distrai da história (segmento → oferta).
+ * Ainda é enviada por baixo dos panos: nos casos golden, é a `seed` que `/personas` devolve
+ * (a mesma dos 5 casos, `GOLDEN_SEED` em `client_personas.py`); no modo Personalizado, é
+ * `DEFAULT_CUSTOM_SEED`. Para conferir na prática, olhe "Resposta crua da API" — a URL da
+ * chamada aparece ali com o `?seed=`.
+ */
+const DEFAULT_CUSTOM_SEED = 42;
+let currentSeed = DEFAULT_CUSTOM_SEED;
+
 /** Pisca o elemento para sinalizar que ele acabou de ser atualizado. */
 function flash(el) {
   el.classList.remove("flash");
@@ -145,13 +183,88 @@ function flash(el) {
   el.classList.add("flash");
 }
 
-const POLICY_LABELS = {
-  publicada: "publicada (20.000 clientes)",
-  em_aprendizado: "em aprendizado (500 clientes)",
+const POLICY_LABEL = "publicada (20.000 clientes)";
+
+/**
+ * Os 8 campos de "perfil do cliente" editáveis na tela — o que já estaria no cadastro do
+ * banco antes de qualquer contato (ver README, "Página de demonstração"). De propósito, o
+ * formulário NÃO inclui `month`, `day_of_week` nem `campaign`: esses três descrevem o
+ * contato em si (quando ele acontece, em que ponto da campanha), não um fato sobre o
+ * cliente. A API continua aceitando os três (com default) para quem chamar `/recommend`
+ * diretamente.
+ *
+ * Também não inclui `previous` e `poutcome`, apesar de serem 2 dos 4 campos que
+ * `context_segment()` de fato usa — ver `BASE_CLIENT` logo abaixo: eles ficam fixos, não
+ * removidos, herdados do caso golden carregado (ou do padrão "cliente novo" no modo
+ * Personalizado). Manter os dois ajustáveis exigiria explicar, na tela, a ordem de
+ * prioridade das regras de segmento (`poutcome` decide antes de tudo, `previous` antes do
+ * canal) — informação demais para o que a tela quer mostrar. `job` e `contact`, os outros 2
+ * campos decisivos, continuam livres.
+ */
+const FIELD_DEFS = [
+  { key: "age", label: "Idade", type: "number", min: 18, max: 120 },
+  { key: "job", label: "Ocupação", type: "select", decisive: true, options: [
+    "unknown", "student", "retired", "admin.", "blue-collar", "entrepreneur", "housemaid",
+    "management", "self-employed", "services", "technician", "unemployed",
+  ] },
+  { key: "marital", label: "Estado civil", type: "select", options: ["unknown", "single", "married", "divorced"] },
+  { key: "education", label: "Educação", type: "select", options: [
+    "unknown", "illiterate", "basic.4y", "basic.6y", "basic.9y", "high.school",
+    "professional.course", "university.degree",
+  ] },
+  { key: "default", label: "Inadimplência de crédito", type: "select", options: ["unknown", "no", "yes"] },
+  { key: "housing", label: "Financiamento imob.", type: "select", options: ["unknown", "no", "yes"] },
+  { key: "loan", label: "Empréstimo pessoal", type: "select", options: ["unknown", "no", "yes"] },
+  { key: "contact", label: "Canal de contato", type: "select", decisive: true, options: ["unknown", "cellular", "telephone"] },
+];
+
+/**
+ * `previous` e `poutcome` fora do formulário, mas ainda entram na chamada — herdados do
+ * caso golden carregado (`loadPersona()`) ou deste padrão neutro (modo Personalizado "do
+ * zero"): um cliente sem histórico, equivalente a `low_engagement` até `job`/`contact`
+ * apontarem `student_digital` ou `retired`.
+ */
+const NEW_CLIENT_DEFAULTS = { previous: 0, poutcome: "unknown" };
+let baseClient = { ...NEW_CLIENT_DEFAULTS };
+
+/** Legenda de apoio ao painel de segmento — só texto explicativo, a decisão vem da API. */
+const SEGMENT_EXPLAIN = {
+  previous_converter: "poutcome = success",
+  student_digital: "job = student e contact = cellular",
+  retired: "job = retired",
+  low_engagement: "previous = 0",
+  digital_channel: "contact = cellular",
+  general: "nenhuma das regras acima se aplicou — segmento padrão",
 };
 
-async function api(path) {
-  const response = await fetch(path, arguments[1]);
+function buildFieldGrid() {
+  $("field-grid").innerHTML = FIELD_DEFS.map((f) => {
+    const id = `f-${f.key}`;
+    const dot = f.decisive ? '<span class="dot" title="Define o segmento hoje"></span>' : "";
+    const control = f.type === "select"
+      ? `<select id="${id}" data-key="${f.key}">${f.options.map((o) => `<option value="${o}">${o}</option>`).join("")}</select>`
+      : `<input id="${id}" data-key="${f.key}" type="number" min="${f.min}" ${f.max != null ? `max="${f.max}"` : ""}>`;
+    return `<div class="field${f.decisive ? " decisive" : ""}"><label for="${id}">${f.label}${dot}</label>${control}</div>`;
+  }).join("");
+}
+
+function readForm() {
+  const client = { ...baseClient };
+  FIELD_DEFS.forEach((f) => {
+    const el = $(`f-${f.key}`);
+    client[f.key] = f.type === "number" ? Number(el.value) : el.value;
+  });
+  return client;
+}
+
+function writeForm(client) {
+  FIELD_DEFS.forEach((f) => {
+    if (client[f.key] !== undefined) $(`f-${f.key}`).value = client[f.key];
+  });
+}
+
+async function api(path, opts) {
+  const response = await fetch(path, opts);
   if (!response.ok) throw new Error(`${response.status} — ${(await response.json()).detail ?? path}`);
   return response.json();
 }
@@ -163,36 +276,74 @@ function fail(err) {
 
 async function boot() {
   try {
+    buildFieldGrid();
+    $("field-grid").addEventListener("input", onFieldEdited);
+    $("field-grid").addEventListener("change", onFieldEdited);
+
     personas = await api("/personas");
-    $("persona").innerHTML = personas
-      .map((p, i) => `<option value="${i}">${p.case_id}</option>`).join("");
+    $("persona").innerHTML = personas.map((p, i) => `<option value="${i}">${p.case_id}</option>`).join("")
+      + '<option value="custom">Personalizado</option>';
 
-    const health = await api("/health");
-    $("policy").innerHTML = health.policies_available
-      .map((p) => `<option value="${p}">${POLICY_LABELS[p] ?? p}</option>`).join("");
-
-    syncPersona();
+    loadPersona();
     await recommend();
   } catch (err) { fail(err); }
 }
 
-function syncPersona() {
+/** Preenche o formulário a partir do caso golden selecionado. */
+function loadPersona() {
   const persona = personas[$("persona").value];
-  $("seed").value = persona.seed;
+  writeForm(persona.client);
+  baseClient = { previous: persona.client.previous, poutcome: persona.client.poutcome };
+  currentSeed = persona.seed;
   $("persona-desc").textContent = persona.descricao;
+  updateGoldenStatus();
+}
+
+/** Editar qualquer campo tira o formulário do golden set e vira exploração livre. */
+function onFieldEdited() {
+  if ($("persona").value !== "custom") {
+    $("persona").value = "custom";
+    currentSeed = DEFAULT_CUSTOM_SEED;
+    $("persona-desc").textContent = "Perfil personalizado — editado a partir de um caso golden.";
+  }
+  updateGoldenStatus();
+}
+
+function updateGoldenStatus() {
+  const badge = $("golden-status");
+  if ($("persona").value === "custom") {
+    badge.textContent = "🧪 exploração livre — fora do golden set";
+    badge.className = "status-pill warn";
+  } else {
+    badge.textContent = "🔒 caso golden set testado";
+    badge.className = "status-pill good";
+  }
+}
+
+function renderSegment(segmentName) {
+  $("segment-name").textContent = segmentName;
+  $("segment-why").textContent = `— ${SEGMENT_EXPLAIN[segmentName] ?? ""}`;
+  $("segment-limits").textContent =
+    "Ocupação e canal (marcados com ●) são os únicos campos ajustáveis que mudam este "
+    + "resultado hoje — contatos anteriores e resultado da campanha anterior também definem "
+    + "o segmento, mas estão fixos (ver nota acima do formulário). Mudar idade, estado civil "
+    + "ou educação não afeta a recomendação com a política atual — é uma limitação "
+    + "documentada, não uma falha do formulário.";
+  $("segment-card").hidden = false;
+  $("step-connector").hidden = false;
+  flash($("segment-card"));
 }
 
 async function recommend(useSeed = true) {
-  const persona = personas[$("persona").value];
-  const policy = $("policy").value;
-  const query = new URLSearchParams({ policy });
-  if (useSeed && $("seed").value !== "") query.set("seed", $("seed").value);
+  const client = readForm();
+  const query = new URLSearchParams();
+  if (useSeed) query.set("seed", currentSeed);
 
-  const url = `/recommend?${query}`;
+  const url = query.toString() ? `/recommend?${query}` : "/recommend";
   const result = await api(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(persona.client),
+    body: JSON.stringify(client),
   });
 
   calls += 1;
@@ -211,21 +362,23 @@ async function recommend(useSeed = true) {
   $("raw").textContent = JSON.stringify(result, null, 2);
   $("raw").classList.remove("err");
 
+  renderSegment(result.segment);
+
   $("offer-name").textContent = result.arm_name;
   $("offer-channel").textContent = [].concat(result.channel ?? "sem canal (controle)").join(" + ");
   $("offer-id").textContent = result.arm_id;
   $("offer-score").textContent = pct(result.score);
-  $("offer-policy").textContent = ` · crença ${POLICY_LABELS[result.policy] ?? result.policy}`;
+  $("offer-policy").textContent = ` · crença ${POLICY_LABEL}`;
   $("result-card").hidden = false;
   $("explore-out").textContent = "";
   flash($("result-card"));
 
-  await renderPolicy(policy, result.arm_id);
+  await renderPolicy(result.arm_id, result.segment);
   return result;
 }
 
-async function renderPolicy(policy, chosenArm) {
-  const state = await api(`/policy?policy=${policy}`);
+async function renderPolicy(chosenArm, segmentName) {
+  const state = await api(`/policy?segment=${segmentName}`);
   const max = Math.max(...state.arms.map((a) => a.belief ?? 0), 0.0001);
 
   $("arms").innerHTML = state.arms.map((arm) => `
@@ -240,13 +393,10 @@ async function renderPolicy(policy, chosenArm) {
   const top = state.arms[0];
   const concentration = total ? (top.observations ?? 0) / total : 0;
 
-  $("policy-note").textContent = concentration > 0.8
-    ? `Treinada em ${obs(state.trained_on_n_clients)} clientes: ${pct(concentration)} de toda a `
-      + `evidência está em ${top.arm_id}. A política já decidiu — por isso clientes diferentes `
-      + `recebem a mesma oferta. Isso é a exploração decaindo com a evidência, não falta de exploração.`
-    : `Treinada em ${obs(state.trained_on_n_clients)} clientes: a evidência ainda está espalhada `
-      + `entre os braços, então a política continua testando alternativas. Compare com a crença `
-      + `publicada para ver o mesmo algoritmo depois de aprender.`;
+  $("policy-note").textContent =
+    `Treinada em ${obs(state.trained_on_n_clients)} clientes: ${pct(concentration)} de toda a `
+    + `evidência do segmento ${state.segment} está em ${top.arm_id}. Quanto mais perto de 100%, `
+    + `menos a política ainda explora esse segmento.`;
 
   $("policy-card").hidden = false;
 }
@@ -266,8 +416,17 @@ async function explore() {
   } catch (err) { fail(err); } finally { $("explore").disabled = false; }
 }
 
-$("persona").addEventListener("change", () => { syncPersona(); recommend().catch(fail); });
-$("policy").addEventListener("change", () => recommend().catch(fail));
+$("persona").addEventListener("change", () => {
+  if ($("persona").value === "custom") {
+    baseClient = { ...NEW_CLIENT_DEFAULTS };
+    currentSeed = DEFAULT_CUSTOM_SEED;
+    $("persona-desc").textContent = "Perfil personalizado — edite os campos abaixo.";
+    updateGoldenStatus();
+    return;
+  }
+  loadPersona();
+  recommend().catch(fail);
+});
 $("go").addEventListener("click", () => recommend().catch(fail));
 $("explore").addEventListener("click", explore);
 boot();

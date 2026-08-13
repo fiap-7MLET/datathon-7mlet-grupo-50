@@ -4,7 +4,8 @@
 
 * **Nome:** Bank Marketing Dataset
 * **Fonte:** Kaggle
-* **Link:** https://www.kaggle.com/code/henriqueyamahata/bank-marketing-classification-roc-f1-recall
+* **Link:** https://www.kaggle.com/datasets/henriqueyamahata/bank-marketing
+* **Identificador Kaggle:** `henriqueyamahata/bank-marketing`
 * **Autor original:** UCI Machine Learning Repository (via Kaggle notebook)
 
 ---
@@ -21,8 +22,10 @@ As campanhas foram realizadas principalmente por telefone, e muitas vezes exigir
 
 ## Versão
 
-* Versão utilizada: versão disponível no Kaggle em Junho de 2026
+* Versão utilizada: 1
 * Base derivada do dataset clássico "Bank Marketing" (UCI)
+* Arquivo esperado: `bank-additional-full.csv`
+* MD5 verificado: `f6cb2c1256ffe2836b36df321f46e92c`
 
 ---
 
@@ -46,29 +49,44 @@ As campanhas foram realizadas principalmente por telefone, e muitas vezes exigir
 
 ## Instruções de Download
 
-1. Acesse o link do Kaggle:
-   https://www.kaggle.com/code/henriqueyamahata/bank-marketing-classification-roc-f1-recall
+1. Configure a autenticação da CLI do Kaggle.
 
-2. Baixe os dados associados ao notebook (ou dataset original "Bank Marketing")
-
-3. Alternativamente, via Kaggle API:
+2. Na raiz do repositório, instale as dependências:
 
 ```bash
-kaggle datasets download -d <dataset-name>
+uv sync
 ```
 
-4. Salve os arquivos na pasta:
+3. Baixe e extraia o dataset diretamente no diretório esperado pelo projeto:
+
+```bash
+uv run kaggle datasets download \
+  -d henriqueyamahata/bank-marketing \
+  -p data/kaggle \
+  --unzip
+```
+
+O comando cria:
 
 ```
-data/kaggle/
+data/kaggle/bank-additional-full.csv
+data/kaggle/bank-additional-names.txt
 ```
+
+4. Gere a base processada usada pelo treino:
+
+```bash
+uv run python -m datathon.data_loader
+```
+
+O resultado será `data/processed/bank_marketing_processed.parquet`.
 
 ---
 
 ##  Arquivos relacionados
 
 * Dicionário de dados: `docs/data_dictionary.md`
-* Análise exploratória: `notebooks/eda.ipynb`
+* Análise exploratória: `notebooks/01_eda.ipynb`
 * Relatório de qualidade: `docs/data_quality_report.md`
 
 ---

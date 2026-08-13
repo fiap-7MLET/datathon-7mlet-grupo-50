@@ -1,14 +1,14 @@
 {
-  "algorithm": "thompson_sampling",
-  "policy_fingerprint": "f4cdbcd0bde7896f",
+  "algorithm": "contextual_thompson_sampling",
+  "policy_fingerprint": "ee6a6d0e16c75533",
   "catalog_version": "1.0.0",
-  "contextual": false,
-  "nota": "Snapshot da mesma política com apenas 500 clientes de treino, quando a exploração ainda está ativa. Contraste com `golden_set.json` (20.000 clientes), onde o posterior já convergiu para um único braço. A política continua não-contextual (ver README, “Escolhas de design”): o que varia entre os casos é a seed.",
+  "contextual": true,
+  "nota": "Snapshot da mesma política com apenas 500 clientes de treino, quando a exploração ainda está ativa. Contraste com `golden_set.json` (20.000 clientes), onde o posterior já convergiu para um conjunto estável de ofertas por segmento. A política é contextual.",
   "cases": [
     {
       "case_id": "previous_converter",
       "descricao": "Já converteu em campanha anterior — segmento de maior conversão real (65,1%).",
-      "seed": 101,
+      "seed": 42,
       "client": {
         "age": 47,
         "job": "management",
@@ -27,13 +27,13 @@
       "expected": {
         "arm_id": "arm_005",
         "arm_name": "CDB liquidez diária",
-        "score": 0.39862542955326463
+        "score": 0.75
       }
     },
     {
       "case_id": "student_digital",
       "descricao": "Estudante em canal digital, em alta temporada (março).",
-      "seed": 202,
+      "seed": 42,
       "client": {
         "age": 22,
         "job": "student",
@@ -50,15 +50,15 @@
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_005",
-        "arm_name": "CDB liquidez diária",
-        "score": 0.39862542955326463
+        "arm_id": "arm_control",
+        "arm_name": "Nenhuma ação",
+        "score": 0.5
       }
     },
     {
       "case_id": "retired",
       "descricao": "Aposentado — perfil conservador, conversão real de 17,6%.",
-      "seed": 303,
+      "seed": 42,
       "client": {
         "age": 68,
         "job": "retired",
@@ -75,15 +75,15 @@
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_control",
-        "arm_name": "Nenhuma ação",
-        "score": 0.15789473684210525
+        "arm_id": "arm_002",
+        "arm_name": "Poupança digital",
+        "score": 0.7142857142857143
       }
     },
     {
       "case_id": "digital_channel_massa",
       "descricao": "Cliente típico da maior fatia da base (54% em canal digital).",
-      "seed": 404,
+      "seed": 42,
       "client": {
         "age": 38,
         "job": "admin.",
@@ -96,19 +96,19 @@
         "month": "jul",
         "day_of_week": "thu",
         "campaign": 3,
-        "previous": 0,
+        "previous": 1,
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_005",
-        "arm_name": "CDB liquidez diária",
-        "score": 0.39862542955326463
+        "arm_id": "arm_008",
+        "arm_name": "Poupança estudantil",
+        "score": 0.35714285714285715
       }
     },
     {
       "case_id": "low_engagement",
       "descricao": "Nunca contactado antes — o caso mais frio, conversão real de 3,7%.",
-      "seed": 505,
+      "seed": 42,
       "client": {
         "age": 31,
         "job": "blue-collar",
@@ -125,14 +125,14 @@
         "poutcome": "nonexistent"
       },
       "expected": {
-        "arm_id": "arm_008",
-        "arm_name": "Poupança estudantil",
-        "score": 0.35398230088495575
+        "arm_id": "arm_005",
+        "arm_name": "CDB liquidez diária",
+        "score": 0.37209302325581395
       }
     }
   ],
   "policy_state": {
-    "algorithm": "thompson_sampling",
+    "algorithm": "contextual_thompson_sampling",
     "arm_ids": [
       "arm_001",
       "arm_002",
@@ -144,28 +144,244 @@
       "arm_008",
       "arm_control"
     ],
-    "alpha": [
-      1.0,
-      1.0,
-      1.0,
-      5.0,
-      116.0,
-      3.0,
-      3.0,
-      40.0,
-      3.0
+    "segments": [
+      "previous_converter",
+      "student_digital",
+      "retired",
+      "low_engagement",
+      "digital_channel",
+      "general"
     ],
-    "beta": [
-      9.0,
-      9.0,
-      12.0,
-      20.0,
-      175.0,
-      16.0,
-      15.0,
-      73.0,
-      16.0
-    ],
+    "posteriors": {
+      "previous_converter": {
+        "arm_001": [
+          3.0,
+          2.0
+        ],
+        "arm_002": [
+          1.0,
+          2.0
+        ],
+        "arm_003": [
+          1.0,
+          1.0
+        ],
+        "arm_004": [
+          2.0,
+          1.0
+        ],
+        "arm_005": [
+          3.0,
+          1.0
+        ],
+        "arm_006": [
+          1.0,
+          2.0
+        ],
+        "arm_007": [
+          4.0,
+          2.0
+        ],
+        "arm_008": [
+          2.0,
+          3.0
+        ],
+        "arm_control": [
+          1.0,
+          2.0
+        ]
+      },
+      "student_digital": {
+        "arm_001": [
+          2.0,
+          1.0
+        ],
+        "arm_002": [
+          1.0,
+          1.0
+        ],
+        "arm_003": [
+          1.0,
+          2.0
+        ],
+        "arm_004": [
+          1.0,
+          2.0
+        ],
+        "arm_005": [
+          1.0,
+          1.0
+        ],
+        "arm_006": [
+          1.0,
+          1.0
+        ],
+        "arm_007": [
+          1.0,
+          2.0
+        ],
+        "arm_008": [
+          2.0,
+          1.0
+        ],
+        "arm_control": [
+          1.0,
+          1.0
+        ]
+      },
+      "retired": {
+        "arm_001": [
+          2.0,
+          1.0
+        ],
+        "arm_002": [
+          5.0,
+          2.0
+        ],
+        "arm_003": [
+          1.0,
+          2.0
+        ],
+        "arm_004": [
+          3.0,
+          3.0
+        ],
+        "arm_005": [
+          9.0,
+          2.0
+        ],
+        "arm_006": [
+          1.0,
+          2.0
+        ],
+        "arm_007": [
+          1.0,
+          3.0
+        ],
+        "arm_008": [
+          1.0,
+          2.0
+        ],
+        "arm_control": [
+          1.0,
+          2.0
+        ]
+      },
+      "low_engagement": {
+        "arm_001": [
+          2.0,
+          15.0
+        ],
+        "arm_002": [
+          16.0,
+          42.0
+        ],
+        "arm_003": [
+          2.0,
+          16.0
+        ],
+        "arm_004": [
+          4.0,
+          19.0
+        ],
+        "arm_005": [
+          64.0,
+          108.0
+        ],
+        "arm_006": [
+          14.0,
+          40.0
+        ],
+        "arm_007": [
+          1.0,
+          10.0
+        ],
+        "arm_008": [
+          14.0,
+          30.0
+        ],
+        "arm_control": [
+          2.0,
+          14.0
+        ]
+      },
+      "digital_channel": {
+        "arm_001": [
+          1.0,
+          5.0
+        ],
+        "arm_002": [
+          2.0,
+          8.0
+        ],
+        "arm_003": [
+          1.0,
+          6.0
+        ],
+        "arm_004": [
+          3.0,
+          6.0
+        ],
+        "arm_005": [
+          1.0,
+          4.0
+        ],
+        "arm_006": [
+          1.0,
+          5.0
+        ],
+        "arm_007": [
+          1.0,
+          6.0
+        ],
+        "arm_008": [
+          5.0,
+          9.0
+        ],
+        "arm_control": [
+          1.0,
+          5.0
+        ]
+      },
+      "general": {
+        "arm_001": [
+          1.0,
+          2.0
+        ],
+        "arm_002": [
+          1.0,
+          2.0
+        ],
+        "arm_003": [
+          1.0,
+          2.0
+        ],
+        "arm_004": [
+          1.0,
+          2.0
+        ],
+        "arm_005": [
+          1.0,
+          2.0
+        ],
+        "arm_006": [
+          1.0,
+          2.0
+        ],
+        "arm_007": [
+          1.0,
+          2.0
+        ],
+        "arm_008": [
+          1.0,
+          1.0
+        ],
+        "arm_control": [
+          1.0,
+          1.0
+        ]
+      }
+    },
     "trained_on_n_clients": 500
   }
 }

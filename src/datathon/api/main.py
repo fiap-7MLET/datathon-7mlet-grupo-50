@@ -4,10 +4,8 @@ Etapa 5 — serviço de recomendação de ofertas.
 Recebe os dados de um cliente e devolve a oferta recomendada pela política treinada na
 Etapa 3 e registrada no MLflow na Etapa 7.
 
-Uma ressalva importante e deliberada: a política de produção é **não-contextual**
-(ver README, “Escolhas de design”). Os dados do cliente são validados e registrados no log, mas **não** alteram a
-escolha do braço — a recomendação vem da crença populacional aprendida na simulação. Dois
-clientes diferentes podem receber a mesma oferta, e isso é o comportamento esperado.
+A política de produção é contextual: os atributos do cliente determinam um segmento
+auditável e a decisão usa o posterior aprendido para esse segmento.
 
 Uso:
     uv run datathon-serve
@@ -21,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from ..client_personas import CLIENT_PERSONAS
@@ -37,6 +35,10 @@ PUBLISHED = "publicada"
 LEARNING = "em_aprendizado"
 
 PolicyChoice = Literal["publicada", "em_aprendizado"]
+SegmentChoice = Literal[
+    "previous_converter", "student_digital", "retired", "low_engagement",
+    "digital_channel", "general"
+]
 """
 Qual crença atender.
 
@@ -61,7 +63,9 @@ class ClientFeatures(BaseModel):
     job: str = Field(default=UNKNOWN, description="Ocupação (ex: student, retired, admin.).")
     marital: str = Field(default=UNKNOWN, description="Estado civil.")
     education: str = Field(default=UNKNOWN, description="Nível educacional.")
-    default: str = Field(default=UNKNOWN, description="Possui crédito em default? yes/no.")
+    default: str = Field(
+        default=UNKNOWN, description="Está inadimplente em algum crédito? yes/no."
+    )
     housing: str = Field(default=UNKNOWN, description="Possui financiamento imobiliário?")
     loan: str = Field(default=UNKNOWN, description="Possui empréstimo pessoal?")
     contact: str = Field(default=UNKNOWN, description="Canal de contato: cellular/telephone.")
@@ -81,17 +85,22 @@ class RecommendationResponse(BaseModel):
     score: Optional[float] = Field(
         description="Crença atual da política na taxa de conversão do braço (média posterior)."
     )
+    segment: Optional[str] = Field(
+        description="Segmento que os atributos do cliente ativaram — a base da personalização."
+    )
     algorithm: str = Field(description="Algoritmo que produziu a recomendação.")
     policy: PolicyChoice = Field(
         default=PUBLISHED, description="Qual crença respondeu: a publicada ou o snapshot da demo."
     )
-    contextual: Literal[False] = Field(
-        default=False,
-        description=(
-            "A política de produção é não-contextual (ver README, “Escolhas de design”): os dados do cliente são "
-            "registrados mas não influenciam a escolha do braço."
-        ),
+    contextual: Literal[True] = Field(
+        default=True, description="Os atributos do cliente influenciam a escolha da oferta."
     )
+
+
+class SegmentResponse(BaseModel):
+    """Resultado isolado de `context_segment()` — sem sortear, sem gastar estado da política."""
+
+    segment: str = Field(description="Segmento que estes atributos de cliente ativam.")
 
 
 class HealthResponse(BaseModel):
@@ -124,6 +133,7 @@ class PolicyResponse(BaseModel):
     trained_on_n_clients: Optional[int] = Field(
         description="Tamanho do horizonte de treino desta crença."
     )
+    segment: str
     arms: list[ArmBeliefResponse]
 
 
@@ -215,6 +225,7 @@ def policy(
     policy: PolicyChoice = Query(
         default=PUBLISHED, description="Qual crença inspecionar."
     ),
+    segment: SegmentChoice = Query(default="general", description="Segmento a auditar."),
 ) -> PolicyResponse:
     """
     Abre a caixa-preta: o que a política acredita sobre **cada** braço, e com quanta
@@ -226,7 +237,11 @@ def policy(
         policy=policy,
         algorithm=meta["algorithm"],
         trained_on_n_clients=meta["trained_on_n_clients"],
-        arms=[ArmBeliefResponse(**vars(belief)) for belief in recommender.beliefs()],
+        segment=segment,
+        arms=[
+            ArmBeliefResponse(**vars(belief))
+            for belief in recommender.beliefs({"segment_override": segment})
+        ],
     )
 
 
@@ -238,6 +253,12 @@ def personas() -> list[PersonaResponse]:
     Mesma fonte que o golden set: a demo não pode oferecer um caso que nenhum teste cobre.
     """
     return [PersonaResponse(**persona) for persona in CLIENT_PERSONAS]
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Quem abre a raiz do serviço provavelmente quer a demo, não um 404."""
+    return RedirectResponse(url="/demo")
 
 
 @app.get("/demo", response_class=HTMLResponse, include_in_schema=False)
@@ -273,7 +294,7 @@ def recommend(
     """Recebe os dados de um cliente e devolve a oferta recomendada."""
     recommender = _recommender_for(policy)
 
-    recommendation = recommender.recommend(seed=seed)
+    recommendation = recommender.recommend(context=client.model_dump(), seed=seed)
     logger.info(
         "Recomendação para cliente (job=%s, contact=%s) via política %s: %s",
         client.job,
@@ -286,9 +307,32 @@ def recommend(
         arm_name=recommendation.arm_name,
         channel=recommendation.channel,
         score=recommendation.score,
+        segment=recommendation.segment,
         algorithm=app_state["policy_meta"][policy]["algorithm"],
         policy=policy,
     )
+
+
+@app.post("/segment", response_model=SegmentResponse)
+def segment(
+    client: ClientFeatures,
+    policy: PolicyChoice = Query(default=PUBLISHED, description="Qual crença calcula o segmento."),
+) -> SegmentResponse:
+    """
+    Só o passo "atributos → segmento", sem sortear nem gastar o estado da política.
+
+    Existe para a tela de simulação de cliente mostrar o segmento assim que o usuário
+    edita um campo, sem forçar um sorteio Thompson a cada tecla — `POST /recommend` é o
+    único caminho que decide de fato e consome aleatoriedade.
+    """
+    recommender = _recommender_for(policy)
+    result = recommender.segment_for(client.model_dump())
+    if result is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A crença '{policy}' não é contextual — não há segmento a calcular.",
+        )
+    return SegmentResponse(segment=result)
 
 
 def run() -> None:
