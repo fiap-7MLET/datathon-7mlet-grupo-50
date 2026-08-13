@@ -122,13 +122,9 @@ segmento decide a oferta.
    sem fixar a seed — a política sorteia de verdade a cada chamada — e conta quantas vezes
    cada oferta saiu, provando ao vivo que a exploração é real.
 
-A demo não mostra mais um seletor de "crença publicada vs. em aprendizado" — simplificação
-deliberada: as duas políticas eram o mesmo algoritmo em dois pontos de treino diferentes
-(20.000 vs. 500 clientes), pensadas para ilustrar a decadência da exploração, mas essa
-evidência já está coberta por `reports/etapa4_avaliacao.md` (coluna "concentração", para
-todas as políticas), então manter as duas na tela só somava uma explicação sem necessidade.
-O snapshot de 500 clientes continua sendo gerado e testado (`uv run datathon-evaluate
---write-golden`, `tests/golden/golden_set_em_aprendizado.json`) — só não aparece mais aqui.
+A demo serve só a política publicada — não há seletor de crenças. A evidência de decadência
+da exploração ao longo do treino fica em `reports/etapa4_avaliacao.md` (coluna
+"concentração", para todas as políticas).
 
 A seed usada em cada chamada também não aparece mais na tela — é um parâmetro técnico sem
 explicação de negócio (ver "Reprodutibilidade" abaixo); continua sendo enviada por baixo dos
@@ -207,7 +203,7 @@ uniforme entre braços com taxas bem diferentes o horizonte inteiro — então a
 sensível à sequência exata de sorteios, e não só à seed. As demais convergem para o mesmo braço
 dominante e por isso são estáveis entre notebook e código.
 
-### Etapa 4 — avaliação e golden set
+### Avaliação e golden set
 
 `uv run datathon-evaluate` refaz a comparação acima medindo, além da conversão e do uplift,
 a **convergência**: para qual braço cada política migrou na segunda metade do horizonte e
@@ -215,15 +211,11 @@ com que concentração. Saída versionada em [`reports/etapa4_avaliacao.md`](rep
 e num run MLflow (`avaliacao-etapa4`). Como todas as políticas enfrentam a mesma matriz de
 desfechos (*common random numbers*), a diferença entre elas é decisão, não sorte.
 
-Os **cinco casos golden** ficam em `tests/golden/`, congelados em dois momentos da vida da
-política — o contraste entre os dois arquivos é o argumento da etapa:
+Os **cinco casos golden** ficam em `tests/golden/golden_set.json`, congelados a partir da
+política publicada (20.000 clientes de treino) — os cinco recebem ofertas estabilizadas por
+segmento.
 
-| arquivo | treino | os 5 casos recebem |
-| --- | --- | --- |
-| `golden_set.json` | 20.000 clientes | ofertas estabilizadas por segmento |
-| `golden_set_em_aprendizado.json` | 500 clientes | maior variação por exploração |
-
-Cada arquivo guarda a impressão digital dos posteriors que o gerou. Se a política for
+O arquivo guarda a impressão digital dos posteriors que o gerou. Se a política for
 retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --write-golden`
 — mudou o modelo, mudou a recomendação, e o time vê antes de gravar o vídeo.
 
@@ -239,7 +231,7 @@ retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --
 
 Os valores estão congelados em `tests/golden/golden_set.json`.
 
-### Etapa 7 — evidência de MLOps
+### Evidência de MLOps
 
 O experimento MLflow `datathon-ofertas-mab` registra parâmetros, conversão, uplift e o JSON
 da política. A execução final produziu o run de treino
@@ -266,33 +258,23 @@ tests/golden/           # os 5 casos congelados da Etapa 4
 reports/                # relatório versionado da avaliação
 ```
 
-## Governança, LGPD e limites de uso
+## Limitações conhecidas e sugestões de melhoria
 
-A finalidade é experimentar ofertas para clientes previamente elegíveis, nunca decidir
-crédito, preço, limite ou acesso a serviço essencial. A base legal e a comunicação ao titular
-devem ser validadas pelo encarregado de dados. Identificadores diretos, renda, patrimônio e
-atributos sensíveis não entram na política. Eventos detalhados devem ser retidos somente pelo
-período aprovado e depois agregados ou eliminados.
+O contextual de hoje resolve o problema do datathon, mas é deliberadamente simples. Registrar
+os limites aqui é mais honesto do que deixar a demo parecer mais sofisticada do que é.
 
-Decisões sensíveis permanecem com humano no loop. Devem ser monitoradas conversão por segmento,
-taxa de exploração, distribuição de ofertas, latência, erros e mudanças de composição. Queda de
-conversão, concentração anormal, ausência de feedback ou disparidade relevante exige pausar a
-política e voltar ao baseline fixo. As recompensas são simuladas e não provam causalidade nem
-desempenho real; produção exige experimento controlado, revisão jurídica, teste de vieses e
-limites de frequência de contato.
+| Limitação | Por que acontece | Sugestão de melhoria |
+| --- | --- | --- |
+| A personalização, na prática, depende de só 2 dos 13 campos do cliente (`job` e `contact`) | `context_segment()` (`src/datathon/bandits/contextual_thompson.py`) é uma cadeia de regras `if/elif`: só `poutcome`, `job`, `contact` e `previous`/`contacted_before` participam da decisão; `age`, `marital`, `education`, `default`, `housing` e `loan` são aceitos pela API mas nunca mudam o segmento — a própria tela `/demo` já avisa disso. | Substituir a segmentação por regras fixas por um bandit contextual genuíno (ex.: LinUCB ou Thompson com regressão logística) que aprenda o peso de cada atributo, em vez de decidir manualmente quais 4 campos importam. |
+| Dentro de `job`, só `student` e `retired` têm tratamento próprio | As outras 10 categorias do dataset (`admin.`, `blue-collar`, `entrepreneur`, `housemaid`, `management`, `self-employed`, `services`, `technician`, `unemployed`, `unknown`) caem todas no mesmo braço da regra (`digital_channel` ou `general`, dependendo só do canal) — nenhuma diferença de oferta entre um `management` e um `unemployed`. | Ampliar a árvore de segmentos (ou trocar por um modelo que use `job` como variável categórica completa) para capturar as diferenças de comportamento que já existem nos dados brutos (ver `docs/data_dictionary.md`). |
+| `digital_channel` sempre recomenda a mesma oferta (Poupança estudantil) | É o braço vencedor do segmento no `golden_set.json` — não porque o produto faça sentido para o perfil, mas porque o catálogo simulado (`offer_catalog.json`) não restringe elegibilidade por idade/ocupação; o multiplicador de segmento é a única coisa que discrimina os braços. | Adicionar regras de elegibilidade por produto no catálogo (ex.: "Poupança estudantil" exige `job=student`), para que o bandit escolha apenas entre ofertas plausíveis para aquele perfil. |
+| ~82% dos clientes caem no segmento `low_engagement`, um "balde" único | `previous == 0` cobre a maior parte da base amostrada; é a primeira regra de exclusão a disparar para quem nunca converteu antes. Reproduzido na seção 11 do `notebooks/03_baseline_e_thompson_sampling.ipynb`: segmentar traz uma diferença agregada de conversão pequena (~0,04%) sobre o Thompson global, porque um segmento dominante domina a média. | Quebrar `low_engagement` em sub-segmentos (ex.: por faixa etária, educação ou mês de contato) para que a maioria da base também se beneficie da personalização, não só as minorias (`student_digital`, `retired`, `digital_channel`). |
+| Os 6 segmentos são mutuamente exclusivos, por prioridade de regra | Um cliente que é `retired` **e** `student_digital` **e** teria `previous_converter` só conta para o primeiro que casar na cadeia `if/elif` — as outras evidências são descartadas, não combinadas. | Modelo aditivo (ex.: features binárias por regra, com um bandit linear) em vez de segmento único, para não perder informação de clientes que ativam mais de uma regra. |
+| Sem *feedback loop* real | A API só serve inferência sobre um `policy_state.json` congelado no treino; não existe endpoint para registrar o desfecho real de uma recomendação e atualizar o posterior em produção. | Adicionar um endpoint de feedback (ex.: `POST /outcome`) que atualize `alpha`/`beta` do segmento e braço servidos, com persistência do estado entre chamadas. |
+| Catálogo de 8 das 9 ofertas é estimativa de negócio, não medida | O dataset Kaggle mede conversão real para **um** produto (depósito a prazo); as taxas base e multiplicadores das outras 8 ofertas em `offer_catalog.json` foram definidos por julgamento de negócio, não observados. | Validar (ou recalibrar) os parâmetros do catálogo com um piloto controlado antes de qualquer decisão real; tratar os números atuais como hipótese, não medição. |
 
-## Etapa 8 — roteiro do vídeo (até 5 minutos)
 
-1. **0:00–0:40:** problema de negócio e limitações de regras fixas/testes A/B longos.
-2. **0:40–1:15:** base Kaggle, remoção de `duration` e preparação dos 41.176 registros.
-3. **1:15–2:10:** baseline 0,3317 versus Thompson contextual 0,4139 (+24,8%).
-4. **2:10–3:30:** abrir `/demo`, executar três personas e explicar os segmentos.
-5. **3:30–4:15:** abrir o MLflow e mostrar parâmetros, métricas e artefato.
-6. **4:15–5:00:** arquitetura AWS, limites, humano no loop e próximos passos.
-
-**Link do vídeo:** adicionar aqui antes da submissão.
-
-## Etapa 6 — Arquitetura-alvo em nuvem (AWS)
+## Arquitetura-alvo em nuvem (AWS)
 
 Em produção, os dados de campanhas e as respostas dos clientes poderão ser armazenados no **Amazon S3**, mantendo separadas as camadas de dados brutos, tratados e os artefatos dos modelos. O treinamento e a avaliação das políticas de recomendação seriam executados no **Amazon SageMaker**, com o **MLflow** registrando parâmetros, métricas e versões dos experimentos. Após a validação, a aplicação e a política aprovada seriam empacotadas em uma imagem de contêiner e publicadas no **Amazon Elastic Container Registry (ECR)**.
 
