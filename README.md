@@ -463,3 +463,21 @@ O contextual de hoje resolve o problema do datathon, mas é deliberadamente simp
 | Os 6 segmentos são mutuamente exclusivos, por prioridade de regra | Um cliente que é `retired` **e** `student_digital` **e** teria `previous_converter` só conta para o primeiro que casar na cadeia `if/elif` — as outras evidências são descartadas, não combinadas. | Modelo aditivo (ex.: features binárias por regra, com um bandit linear) em vez de segmento único, para não perder informação de clientes que ativam mais de uma regra. |
 | O loop de feedback só vive na memória do processo | `POST /outcome` (ver "Loop de feedback" abaixo) já atualiza `alpha`/`beta` do segmento e braço servidos, mas só no objeto em memória — nada é regravado em disco/MLflow. Reiniciar a API volta para a política publicada, e múltiplas réplicas (ex.: várias tasks ECS) não compartilhariam esse aprendizado entre si. | Persistir o estado atualizado (ex.: reescrever `policy_state.json` com lock, ou mover para um store compartilhado) para que o aprendizado online sobreviva a um restart e escale além de um único processo. |
 | Catálogo de 8 das 9 ofertas é estimativa de negócio, não medida | O dataset Kaggle mede conversão real para **um** produto (depósito a prazo); as taxas base e multiplicadores das outras 8 ofertas em `offer_catalog.json` foram definidos por julgamento de negócio, não observados. | Validar (ou recalibrar) os parâmetros do catálogo com um piloto controlado antes de qualquer decisão real; tratar os números atuais como hipótese, não medição. |
+
+#### Outras limitações
+
+Além das limitações apresentadas na tabela acima, a solução também possui as seguintes limitações:
+
+- **Recompensa com atraso:** o parâmetro `reward_delay_days` existe no catálogo e no gerador sintético standalone, mas não é utilizado no ambiente principal de treino e avaliação, onde a recompensa é considerada imediata.
+
+- **MLflow local:** o estado de tracking do MLflow não é versionado no repositório. A evidência reprodutível é composta pelo comando de treino, pelos relatórios versionados e pelo JSON da política.
+
+- **Persistência da política:** a política é persistida em um arquivo JSON local, sem utilização de banco de dados ou de um registry formal e versionado.
+
+- **Feedback online:** o endpoint `POST /outcome` atualiza o posterior apenas na memória do processo. Ao reiniciar a API, as atualizações online são perdidas e a política publicada é recarregada.
+
+- **Segurança da API:** a API não possui autenticação nem rate limiting, sendo adequada ao contexto de demonstração, mas não a um ambiente de produção.
+
+- **Ambiente não-estacionário:** a simulação assume um comportamento estático dos clientes e não trata mudanças nas preferências ou nas taxas de conversão ao longo do tempo.
+
+- **Escalabilidade:** a solução executa em uma única máquina, sem fila de eventos ou processamento distribuído, limitando sua capacidade de escalar para maiores volumes de requisições e eventos.
