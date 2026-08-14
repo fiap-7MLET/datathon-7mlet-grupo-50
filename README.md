@@ -18,6 +18,23 @@ aprende com as respostas observadas.
 Nota: A coluna `duration` é descartada por vazamento temporal. Detalhes em
 [`data/kaggle/README.md`](data/kaggle/README.md) e [`docs/data_dictionary.md`](docs/data_dictionary.md).
 
+### Notebooks
+
+Os notebooks documentam a evolução da análise até a escolha da política adaptativa:
+
+1. [`01_eda.ipynb`](notebooks/01_eda.ipynb) - realiza a análise exploratória do Bank
+   Marketing Dataset, verificando qualidade, valores ausentes, duplicidades, outliers,
+   vazamento de dados, desbalanceamento da variável-alvo e segmentos com maior ou menor
+   propensão à conversão.
+2. [`02_synthetic_enrichment.ipynb`](notebooks/02_synthetic_enrichment.ipynb) - usa os
+   resultados da análise exploratória para definir segmentos de clientes, calibrar taxas
+   base de conversão e multiplicadores e, assim, fundamentar a geração dos dados sintéticos
+   usados no ambiente de simulação.
+3. [`03_baseline_e_thompson_sampling.ipynb`](notebooks/03_baseline_e_thompson_sampling.ipynb)
+   — compara os baselines fixo e aleatório com Thompson Sampling, UCB1 e Epsilon-Greedy em
+   um cenário reproduzível. Também avalia o Thompson Sampling contextual por
+   segmento e documenta sua escolha como política final de produção.
+
 ### Mapa de pastas do projeto
 
 ```
@@ -33,7 +50,7 @@ src/datathon/
 notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline vs adaptativos
 data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
 tests/golden/           # os 5 casos congelados da Etapa 4
-reports/                # relatório de avaliação gerado por datathon-evaluate (fora do git)
+reports/                # relatório versionado, gerado por datathon-evaluate
 ```
 
 ## 1. Instruções de execução local
@@ -121,6 +138,77 @@ está sendo servida e se ela veio do MLflow ou do arquivo local. `GET /` redirec
 | API | FastAPI | Validação por schema (Pydantic) e documentação OpenAPI automática. |
 | Rastreamento | MLflow local | Ferramenta do curso; registra parâmetros, métricas e o artefato da política. |
 
+### Governança, privacidade e limitações
+
+Este projeto tem finalidade exclusivamente acadêmica e utiliza uma base pública, histórica e
+sem identificadores diretos de clientes. Não são usados patrimônio, renda, gênero ou raça. A
+preparação mantém apenas os atributos necessários para analisar conversão e remove `duration`,
+que só é conhecida depois da ligação e causaria vazamento temporal.
+
+Em uma implantação real, a instituição deveria definir e documentar com as áreas jurídica e de
+privacidade a base legal aplicável sob a LGPD, a finalidade de cada atributo e um prazo de
+retenção. Dados e eventos deixariam de ser mantidos quando a finalidade terminasse, por exclusão
+ou anonimização. Acesso aos dados, políticas e artefatos seria restrito e auditável. Decisões
+sensíveis, como concessão ou recusa de crédito, não seriam automatizadas por esta política: o
+bandit apenas recomenda uma oferta e casos com impacto financeiro relevante permaneceriam com
+revisão humana e possibilidade de contestação.
+
+As principais limitações são o caráter histórico da base, o predomínio de campanhas telefônicas,
+o desbalanceamento da conversão e a ausência de resultados reais para as ofertas sintéticas. As
+taxas e recompensas simuladas servem para comparar políticas em condições controladas, não para
+estimar o comportamento atual de clientes. Atributos como idade, ocupação e estado civil podem
+introduzir vieses e precisariam de avaliação periódica de desempenho por grupo antes de qualquer
+uso real. Em produção, conversão, exploração, distribuição das ofertas, mudanças de contexto e
+possíveis disparidades entre grupos seriam monitoradas, com suspensão ou retorno a uma política
+segura quando os limites definidos pela governança fossem ultrapassados.
+
+#### Dados e recompensa
+
+- Oito das nove ofertas do catálogo são estimativas de negócio, não taxas medidas. Apenas
+  `arm_001` é ancorado na taxa real de conversão do dataset (`0,113`).
+- As recompensas são simuladas e, portanto, não demonstram causalidade nem garantem desempenho
+  em produção.
+- O modelo de recompensa atrasada (`reward_delay_days`) está definido no catálogo e é usado pelo
+  gerador sintético independente, mas não participa do ambiente principal de treino e avaliação,
+  no qual a recompensa é observada imediatamente após cada decisão.
+
+#### Algoritmos
+
+- **Epsilon-Greedy:** utiliza `epsilon=0,10` fixo, sem decaimento. Mesmo depois de convergir,
+  continua destinando 10% das decisões à exploração aleatória.
+- **UCB1:** é determinístico dado o histórico e sensível à ordem do *warm-up*, no qual cada braço
+  é selecionado uma vez antes da aplicação da fórmula.
+- **Thompson Sampling global e contextual:** usam o prior neutro Beta(1, 1), sem incorporar
+  conhecimento prévio de negócio sobre a propensão de conversão das ofertas.
+- **Thompson Sampling contextual:** divide a evidência entre seis segmentos. Segmentos raros,
+  como `previous_converter`, recebem menos observações e convergem mais lentamente que segmentos
+  frequentes.
+- **Cold start:** Thompson global, Thompson contextual, UCB1 e Epsilon-Greedy começam sem
+  observações. As primeiras decisões de cada braço — e de cada par segmento-braço no caso
+  contextual — são, por definição, pouco informadas.
+
+#### Sistema
+
+- O braço "Poupança estudantil" é matematicamente o mais atraente no catálogo para
+  `digital_channel`, segmento que não é exclusivo de estudantes. Existe, portanto, um desalinho
+  entre o nome comercial do produto e o público para o qual ele pode ser recomendado.
+- O MLflow é local e seu estado de tracking não é versionado. A evidência reproduzível no
+  repositório é formada pelo comando de treino, pelo relatório de avaliação e pelo JSON da
+  política publicada.
+- A promoção da política usa uma tag no MLflow e mantém uma cópia em JSON local como
+  contingência; não há banco de dados de políticas nem um Model Registry formalmente versionado.
+- O `POST /outcome` atualiza o posterior somente na memória do processo. Ao reiniciar ou fazer
+  novo deploy, a API recarrega o estado publicado e perde as atualizações online posteriores;
+  réplicas diferentes também não compartilham essas atualizações.
+- A API não possui autenticação nem *rate limiting*. Isso é aceitável para a demonstração, mas
+  inadequado para exposição em produção.
+- Mudanças de comportamento dos clientes ao longo do tempo não são modeladas. A simulação assume
+  um ambiente estacionário, com probabilidades de recompensa fixas.
+- Treino, avaliação e serviço executam em uma única máquina, sem fila de eventos ou processamento
+  distribuído.
+- `tests/test_contracts.py` está vazio. O arquivo é código morto e permanece como decisão
+  pendente: implementar os testes de contrato planejados ou removê-lo.
+
 ### Resultado (20.000 clientes simulados)
 
 | Estratégia | Conversão | Uplift vs baseline fixo |
@@ -158,15 +246,11 @@ com que concentração. Saída versionada em [`reports/etapa4_avaliacao.md`](rep
 e num run MLflow (`avaliacao-etapa4`). Como todas as políticas enfrentam a mesma matriz de
 desfechos (*common random numbers*), a diferença entre elas é decisão, não sorte.
 
-Os **cinco casos golden** ficam em `tests/golden/`, congelados em dois momentos da vida da
-política — o contraste entre os dois arquivos é o argumento da etapa:
+Os **cinco casos golden** ficam em `tests/golden/golden_set.json`, congelados a partir da
+política publicada (20.000 clientes de treino) — os cinco recebem ofertas estabilizadas por
+segmento.
 
-| arquivo | treino | os 5 casos recebem |
-| --- | --- | --- |
-| `golden_set.json` | 20.000 clientes | ofertas estabilizadas por segmento |
-| `golden_set_em_aprendizado.json` | 500 clientes | maior variação por exploração |
-
-Cada arquivo guarda a impressão digital dos posteriors que o gerou. Se a política for
+O arquivo guarda a impressão digital dos posteriors que o gerou. Se a política for
 retreinada e a crença mudar, o teste falha pedindo `uv run datathon-evaluate --write-golden`
 — mudou o modelo, mudou a recomendação, e o time vê antes de gravar o vídeo.
 
@@ -190,40 +274,32 @@ dois passos, nessa ordem — Passo 1 de 2 (segmento) acima do Passo 2 de 2 (ofer
 por uma seta na tela — porque é a ordem real da decisão: atributos decidem o segmento, o
 segmento decide a oferta.
 
-1. **Cliente.** Um formulário com 8 campos de **perfil** — idade, ocupação, estado civil,
-   educação, default, financiamento, empréstimo e canal. De propósito, fica de fora:
-   - `month`, `day_of_week`, `campaign` — descrevem o contato em si (quando ele acontece, em
-     que ponto da campanha atual), não um fato sobre o cliente. A API continua aceitando os
-     três para quem chamar `/recommend` diretamente, com o valor padrão do schema.
-   - `previous` e `poutcome` — apesar de serem 2 dos 4 campos que de fato definem o segmento
-     (`context_segment()`), editá-los exigiria explicar a ordem de prioridade das regras na
-     tela (`poutcome` decide antes de tudo; `previous` antes do canal). Em vez disso, ficam
-     **fixos**: herdados do caso golden carregado, ou tratados como "cliente novo"
-     (`previous=0`, `poutcome=unknown`) no modo Personalizado partindo do zero. Só `job` e
-     `contact` — os outros 2 campos decisivos, marcados com **●** — continuam ajustáveis.
+1. **Cliente.** Um formulário com 10 campos de **perfil** — idade, ocupação, estado civil,
+   educação, default, financiamento, empréstimo, canal, contatos anteriores e resultado da
+   campanha anterior. De propósito, fica de fora `month`, `day_of_week` e `campaign`: eles
+   descrevem o contato em si (quando ele acontece, em que ponto da campanha atual), não um
+   fato sobre o cliente. A API continua aceitando os três para quem chamar `/recommend`
+   diretamente, com o valor padrão do schema.
+
+   Os 4 campos marcados com **●** — ocupação, canal, contatos anteriores e resultado da
+   campanha anterior — são exatamente os que `context_segment()` usa para decidir o segmento;
+   os demais aparecem no formulário, mas ainda não influenciam a recomendação com a política
+   atual — mostrado na tela, não escondido: é uma limitação documentada do segmento
+   contextual de hoje, não um bug do formulário.
 
    Os cinco casos golden da Etapa 4 aparecem como *presets* no seletor "Cliente" — escolher
    um preenche o formulário inteiro. Editar qualquer campo troca automaticamente para
    **Personalizado** e o selo muda de `🔒 caso golden set testado` para `🧪 exploração livre
    — fora do golden set`: o formulário continua funcionando, só deixa de ser um caso
    protegido por teste.
-
-   Os demais campos (idade, estado civil, educação, default, financiamento, empréstimo)
-   ainda não influenciam a recomendação com a política atual — mostrado na tela, não
-   escondido: é uma limitação documentada do segmento contextual de hoje, não um bug do
-   formulário.
 2. **Oferta recomendada**, com a crença da política sobre **cada** braço do segmento em
    barras — quanta evidência sustenta cada uma. O botão *Explorar 20×* chama a API 20 vezes
    sem fixar a seed — a política sorteia de verdade a cada chamada — e conta quantas vezes
    cada oferta saiu, provando ao vivo que a exploração é real.
 
-A demo não mostra mais um seletor de "crença publicada vs. em aprendizado" — simplificação
-deliberada: as duas políticas eram o mesmo algoritmo em dois pontos de treino diferentes
-(20.000 vs. 500 clientes), pensadas para ilustrar a decadência da exploração, mas essa
-evidência já está coberta por `reports/etapa4_avaliacao.md` (coluna "concentração", para
-todas as políticas), então manter as duas na tela só somava uma explicação sem necessidade.
-O snapshot de 500 clientes continua sendo gerado e testado (`uv run datathon-evaluate
---write-golden`, `tests/golden/golden_set_em_aprendizado.json`) — só não aparece mais aqui.
+A demo serve só a política publicada — não há seletor de crenças. A evidência de decadência
+da exploração ao longo do treino fica em `reports/etapa4_avaliacao.md` (coluna
+"concentração", para todas as políticas).
 
 A seed usada em cada chamada também não aparece mais na tela — é um parâmetro técnico sem
 explicação de negócio (ver "Reprodutibilidade" abaixo); continua sendo enviada por baixo dos
@@ -231,6 +307,34 @@ panos, e dá para conferir no painel "Resposta crua da API", que mostra a URL co
 chamada com `?seed=`.
 
 `GET /policy` expõe a crença em JSON, para quem quiser auditar a decisão sem a página.
+
+### Loop de feedback — `POST /outcome`
+
+`POST /recommend` devolve, além da oferta, um `recommendation_id`. É esse id — não o
+`arm_id` — que fecha o loop: `POST /outcome` recebe `{"recommendation_id": "...",
+"accepted": true|false}` e atualiza o posterior Beta do braço e segmento que aquela
+recomendação específica usou, com `1.0` de recompensa se o cliente aceitou e `0.0` se
+recusou. Cada `recommendation_id` só pode ser resolvido uma vez — a segunda tentativa (ou um
+id desconhecido) devolve `404`, para não contar o mesmo desfecho duas vezes.
+
+O segmento vem de onde a recomendação foi decidida, guardado num log em memória no momento
+do `/recommend` — nunca recalculado do estado atual da política. Isso corrige um bug que
+existia antes deste endpoint: a política contextual guardava o último segmento visto
+(`_last_segment`) e o usaria em `update()`; sob chamadas concorrentes, uma segunda
+recomendação (de outro cliente, outro segmento) podia sobrescrever esse valor antes do
+desfecho da primeira chegar, atualizando o braço errado. `record_outcome()` sempre passa o
+segmento explicitamente agora.
+
+Na página `/demo`, cada recomendação vem com os botões "Cliente aceitou" / "Cliente
+recusou"; clicar chama `/outcome` e redesenha as barras de crença com o posterior já
+atualizado. Como a política publicada tem milhares de observações acumuladas em alguns
+braços (ver `data/processed/policy_state.json`), um clique isolado quase não move o
+posterior nesses casos — por isso a demo também tem "Recusar 20×", que recomenda e recusa 20
+vezes seguidas sem seed, tornando visível a política migrando de braço em segmentos com
+pouca evidência acumulada.
+
+Esse estado atualizado só existe na memória do processo da API — não é regravado em
+`policy_state.json` nem no MLflow (ver "Limitações conhecidas").
 
 ### 5.1. Reprodutibilidade - Parâmetro `seed`
 
@@ -301,7 +405,7 @@ flowchart LR
 
 O projeto utiliza **MLflow** para acompanhar o treinamento e manter ligação entre
 a configuração utilizada, os resultados obtidos e a política publicada na API. Cada
-execução de `datathon-train` cria um novo *run* (`data/mlruns/*`) no experimento
+execução de `datathon-train` cria um novo *run* (`mlruns/*`) no experimento
 `datathon-ofertas-mab`, sem sobrescrever o histórico das execuções anteriores.
 
 Para executar o treinamento e visualizar os experimentos:
@@ -317,6 +421,27 @@ A avaliação da Etapa 4 também cria um *run* no mesmo experimento:
 uv run datathon-evaluate
 ```
 
+#### Evidência da execução final
+
+Os runs abaixo foram gerados localmente em 14/08/2026 no experimento
+`datathon-ofertas-mab` e terminaram com status `FINISHED`:
+
+| Run | ID MLflow | Evidência registrada |
+| --- | --- | --- |
+| `baseline-vs-adaptativos` | `b90e834d7aef485e906c88e0a24ddc6f` | 20.000 clientes, 9 braços, catálogo 1.0.0, seeds 42/2026, epsilon 0,10, priors Beta(1, 1), conversão e uplift das seis políticas, além do artefato `policy/policy_state.json` |
+| `avaliacao-etapa4` | `8fd9ce19e9964217ba93d9ebb9607b8a` | conversão, uplift e concentração das seis políticas, além do artefato `etapa4_avaliacao.md` |
+
+Na execução final, o MLflow registrou conversão de `0,4139` e uplift de `+24,8%` para
+o Thompson Sampling contextual, contra conversão de `0,3317` para o baseline fixo. Esses
+valores também estão consolidados no relatório versionado
+[`reports/etapa4_avaliacao.md`](reports/etapa4_avaliacao.md). Para conferir parâmetros,
+métricas, tags e artefatos na interface, execute `uv run mlflow ui`, abra
+`http://127.0.0.1:5000`, selecione o experimento e pesquise um dos IDs acima.
+
+O diretório `mlruns/` e o banco `mlflow.db` representam estado local de execução e não são
+versionados. Os IDs documentam a execução usada na entrega; em outro clone, os comandos acima
+criam novos runs com IDs próprios e os mesmos parâmetros reproduzíveis.
+
 Ao iniciar, a API procura o *run* de produção mais recente no MLflow e carrega o artefato
 publicado. Se o serviço de tracking não estiver disponível, utiliza como contingência a
 cópia versionada em `data/processed/policy_state.json`. O endpoint `GET /health` informa se
@@ -324,3 +449,17 @@ a política foi carregada do MLflow ou do arquivo local.
 
 Os diretórios locais `mlruns/`, `mlartifacts/` e o banco `mlflow.db` não são enviados ao Git,
 pois representam o estado de execução de cada ambiente.
+
+## Limitações conhecidas e sugestões de melhoria
+
+O contextual de hoje resolve o problema do datathon, mas é deliberadamente simples. Logo abaixo deixaremos alguns registros de limitações da solução como elas podem ser superadas.
+
+| Limitação | Por que acontece | Sugestão de melhoria |
+| --- | --- | --- |
+| A personalização, na prática, depende de só 2 dos 13 campos do cliente (`job` e `contact`) | `context_segment()` (`src/datathon/bandits/contextual_thompson.py`) é uma cadeia de regras `if/elif`: só `poutcome`, `job`, `contact` e `previous`/`contacted_before` participam da decisão; `age`, `marital`, `education`, `default`, `housing` e `loan` são aceitos pela API mas nunca mudam o segmento — a própria tela `/demo` já avisa disso. | Substituir a segmentação por regras fixas por um bandit contextual genuíno (ex.: LinUCB ou Thompson com regressão logística) que aprenda o peso de cada atributo, em vez de decidir manualmente quais 4 campos importam. |
+| Dentro de `job`, só `student` e `retired` têm tratamento próprio | As outras 10 categorias do dataset (`admin.`, `blue-collar`, `entrepreneur`, `housemaid`, `management`, `self-employed`, `services`, `technician`, `unemployed`, `unknown`) caem todas no mesmo braço da regra (`digital_channel` ou `general`, dependendo só do canal) — nenhuma diferença de oferta entre um `management` e um `unemployed`. | Ampliar a árvore de segmentos (ou trocar por um modelo que use `job` como variável categórica completa) para capturar as diferenças de comportamento que já existem nos dados brutos (ver `docs/data_dictionary.md`). |
+| `digital_channel` sempre recomenda a mesma oferta (Poupança estudantil) | É o braço vencedor do segmento no `golden_set.json` — não porque o produto faça sentido para o perfil, mas porque o catálogo simulado (`offer_catalog.json`) não restringe elegibilidade por idade/ocupação; o multiplicador de segmento é a única coisa que discrimina os braços. | Adicionar regras de elegibilidade por produto no catálogo (ex.: "Poupança estudantil" exige `job=student`), para que o bandit escolha apenas entre ofertas plausíveis para aquele perfil. |
+| ~82% dos clientes caem no segmento `low_engagement`, um "balde" único | `previous == 0` cobre a maior parte da base amostrada; é a primeira regra de exclusão a disparar para quem nunca converteu antes. Reproduzido na seção 11 do `notebooks/03_baseline_e_thompson_sampling.ipynb`: segmentar traz uma diferença agregada de conversão pequena (~0,04%) sobre o Thompson global, porque um segmento dominante domina a média. | Quebrar `low_engagement` em sub-segmentos (ex.: por faixa etária, educação ou mês de contato) para que a maioria da base também se beneficie da personalização, não só as minorias (`student_digital`, `retired`, `digital_channel`). |
+| Os 6 segmentos são mutuamente exclusivos, por prioridade de regra | Um cliente que é `retired` **e** `student_digital` **e** teria `previous_converter` só conta para o primeiro que casar na cadeia `if/elif` — as outras evidências são descartadas, não combinadas. | Modelo aditivo (ex.: features binárias por regra, com um bandit linear) em vez de segmento único, para não perder informação de clientes que ativam mais de uma regra. |
+| O loop de feedback só vive na memória do processo | `POST /outcome` (ver "Loop de feedback" abaixo) já atualiza `alpha`/`beta` do segmento e braço servidos, mas só no objeto em memória — nada é regravado em disco/MLflow. Reiniciar a API volta para a política publicada, e múltiplas réplicas (ex.: várias tasks ECS) não compartilhariam esse aprendizado entre si. | Persistir o estado atualizado (ex.: reescrever `policy_state.json` com lock, ou mover para um store compartilhado) para que o aprendizado online sobreviva a um restart e escale além de um único processo. |
+| Catálogo de 8 das 9 ofertas é estimativa de negócio, não medida | O dataset Kaggle mede conversão real para **um** produto (depósito a prazo); as taxas base e multiplicadores das outras 8 ofertas em `offer_catalog.json` foram definidos por julgamento de negócio, não observados. | Validar (ou recalibrar) os parâmetros do catálogo com um piloto controlado antes de qualquer decisão real; tratar os números atuais como hipótese, não medição. |

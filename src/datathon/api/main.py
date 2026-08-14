@@ -17,13 +17,14 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, Optional
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from ..client_personas import CLIENT_PERSONAS
-from .policy_store import load_catalog, load_learning_policy_state, load_policy_state
+from .policy_store import load_catalog, load_policy_state
 from .recommender import OfferRecommender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -31,22 +32,11 @@ logger = logging.getLogger(__name__)
 
 UNKNOWN = "unknown"
 
-PUBLISHED = "publicada"
-LEARNING = "em_aprendizado"
-
-PolicyChoice = Literal["publicada", "em_aprendizado"]
 SegmentChoice = Literal[
     "previous_converter", "student_digital", "retired", "low_engagement",
     "digital_channel", "general"
 ]
-"""
-Qual crença atender.
-
-`publicada` é a política de produção — a treinada em 20.000 clientes e registrada no
-MLflow; é o default e é o que qualquer integração real usa. `em_aprendizado` é um snapshot
-de horizonte curto que existe **só para a demo**, para mostrar a mesma política antes de a
-exploração decair. Não é uma segunda política de produção.
-"""
+"""Segmento que os atributos do cliente ativam — a base auditável da personalização."""
 
 DEMO_PAGE = Path(__file__).parent / "static" / "demo.html"
 
@@ -77,6 +67,13 @@ class ClientFeatures(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
+    recommendation_id: str = Field(
+        description=(
+            "Identifica esta decisão. Envie de volta em POST /outcome quando souber o "
+            "desfecho — é o que liga o feedback ao braço e segmento certos, sem depender de "
+            "estado implícito da política."
+        )
+    )
     arm_id: str = Field(description="Identificador do braço recomendado no catálogo.")
     arm_name: str = Field(description="Nome de negócio da oferta.")
     channel: str | list[str] | None = Field(
@@ -89,12 +86,21 @@ class RecommendationResponse(BaseModel):
         description="Segmento que os atributos do cliente ativaram — a base da personalização."
     )
     algorithm: str = Field(description="Algoritmo que produziu a recomendação.")
-    policy: PolicyChoice = Field(
-        default=PUBLISHED, description="Qual crença respondeu: a publicada ou o snapshot da demo."
-    )
     contextual: Literal[True] = Field(
         default=True, description="Os atributos do cliente influenciam a escolha da oferta."
     )
+
+
+class OutcomeRequest(BaseModel):
+    recommendation_id: str = Field(description="O id devolvido por POST /recommend.")
+    accepted: bool = Field(description="O cliente aceitou a oferta recomendada?")
+
+
+class OutcomeResponse(BaseModel):
+    recommendation_id: str
+    arm_id: str = Field(description="Braço cujo posterior foi atualizado.")
+    segment: Optional[str] = Field(description="Segmento cujo posterior foi atualizado.")
+    reward: float = Field(description="Recompensa aplicada (1.0 aceitou, 0.0 recusou).")
 
 
 class SegmentResponse(BaseModel):
@@ -108,10 +114,6 @@ class HealthResponse(BaseModel):
     algorithm: str
     policy_source: str = Field(description="De onde a política foi carregada: mlflow ou local.")
     n_arms: int
-    policies_available: list[str] = Field(
-        description="Crenças que a API pode atender. `em_aprendizado` só existe se o "
-        "snapshot da demo tiver sido gerado."
-    )
 
 
 class ArmBeliefResponse(BaseModel):
@@ -128,7 +130,6 @@ class ArmBeliefResponse(BaseModel):
 class PolicyResponse(BaseModel):
     """Estado da crença, braço a braço — a decisão auditável por trás de `/recommend`."""
 
-    policy: PolicyChoice
     algorithm: str
     trained_on_n_clients: Optional[int] = Field(
         description="Tamanho do horizonte de treino desta crença."
@@ -147,54 +148,44 @@ class PersonaResponse(BaseModel):
 app_state: dict[str, Any] = {}
 
 
-def _register(name: str, policy_state: dict[str, Any], catalog: dict[str, Any], source: str) -> None:
-    app_state.setdefault("recommenders", {})[name] = OfferRecommender(
-        policy_state=policy_state, catalog=catalog
-    )
-    app_state.setdefault("policy_meta", {})[name] = {
-        "algorithm": policy_state["algorithm"],
-        "source": source,
-        "n_arms": len(policy_state["arm_ids"]),
-        "trained_on_n_clients": policy_state.get("trained_on_n_clients"),
-    }
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Carrega política e catálogo uma única vez, no startup — nunca no caminho do request."""
     catalog = load_catalog()
     policy_state, source = load_policy_state()
-    _register(PUBLISHED, policy_state, catalog, source)
+    app_state["recommender"] = OfferRecommender(policy_state=policy_state, catalog=catalog)
+    app_state["policy_meta"] = {
+        "algorithm": policy_state["algorithm"],
+        "source": source,
+        "n_arms": len(policy_state["arm_ids"]),
+        "trained_on_n_clients": policy_state.get("trained_on_n_clients"),
+    }
+    app_state["decisions"] = {}
+    """
+    Recomendações à espera de desfecho: recommendation_id -> {arm_id, segment}.
 
-    learning_state = load_learning_policy_state()
-    if learning_state is not None:
-        _register(LEARNING, learning_state, catalog, "local:snapshot-demo")
+    Em memória, de propósito — este processo é o único a servir a política, e o objetivo é
+    fechar o loop exploração/explotação ao vivo na demo, não sobreviver a um restart. Uma
+    entrada some assim que POST /outcome a resolve (pop), então o dicionário só cresce com
+    recomendações ainda sem resposta.
+    """
 
     logger.info(
-        "API pronta: política '%s' (%s braços) carregada de %s. Crenças disponíveis: %s.",
+        "API pronta: política '%s' (%s braços) carregada de %s.",
         policy_state["algorithm"],
         len(policy_state["arm_ids"]),
         source,
-        ", ".join(app_state["recommenders"]),
     )
     yield
     app_state.clear()
 
 
-def _recommender_for(policy: str) -> OfferRecommender:
-    """Recupera a crença pedida, ou explica como gerá-la — em vez de um 500 opaco."""
-    recommenders = app_state.get("recommenders") or {}
-    if PUBLISHED not in recommenders:
+def _recommender() -> OfferRecommender:
+    """Recupera a política carregada, ou explica que a API ainda não subiu — em vez de um 500 opaco."""
+    recommender = app_state.get("recommender")
+    if recommender is None:
         raise HTTPException(status_code=503, detail="Política ainda não carregada.")
-    if policy not in recommenders:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"Crença '{policy}' não disponível. Gere o snapshot da demo com "
-                "`uv run datathon-evaluate --write-golden` e reinicie a API."
-            ),
-        )
-    return recommenders[policy]
+    return recommender
 
 
 app = FastAPI(
@@ -208,7 +199,7 @@ app = FastAPI(
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """Diz se a API está de pé e qual política ela está servindo."""
-    meta = (app_state.get("policy_meta") or {}).get(PUBLISHED)
+    meta = app_state.get("policy_meta")
     if meta is None:
         raise HTTPException(status_code=503, detail="Política ainda não carregada.")
     return HealthResponse(
@@ -216,25 +207,20 @@ def health() -> HealthResponse:
         algorithm=meta["algorithm"],
         policy_source=meta["source"],
         n_arms=meta["n_arms"],
-        policies_available=sorted(app_state["recommenders"]),
     )
 
 
 @app.get("/policy", response_model=PolicyResponse)
 def policy(
-    policy: PolicyChoice = Query(
-        default=PUBLISHED, description="Qual crença inspecionar."
-    ),
     segment: SegmentChoice = Query(default="general", description="Segmento a auditar."),
 ) -> PolicyResponse:
     """
     Abre a caixa-preta: o que a política acredita sobre **cada** braço, e com quanta
     evidência. É o que sustenta a afirmação "ela aprendeu qual oferta converte melhor".
     """
-    recommender = _recommender_for(policy)
-    meta = app_state["policy_meta"][policy]
+    recommender = _recommender()
+    meta = app_state["policy_meta"]
     return PolicyResponse(
-        policy=policy,
         algorithm=meta["algorithm"],
         trained_on_n_clients=meta["trained_on_n_clients"],
         segment=segment,
@@ -283,41 +269,71 @@ def recommend(
             "Sem seed, a política explora e chamadas sucessivas podem variar."
         ),
     ),
-    policy: PolicyChoice = Query(
-        default=PUBLISHED,
-        description=(
-            "Qual crença atende a chamada. `em_aprendizado` é o snapshot de horizonte "
-            "curto usado na demo; produção usa sempre a publicada."
-        ),
-    ),
 ) -> RecommendationResponse:
     """Recebe os dados de um cliente e devolve a oferta recomendada."""
-    recommender = _recommender_for(policy)
+    recommender = _recommender()
 
     recommendation = recommender.recommend(context=client.model_dump(), seed=seed)
+    recommendation_id = uuid4().hex
+    app_state["decisions"][recommendation_id] = {
+        "arm_id": recommendation.arm_id,
+        "segment": recommendation.segment,
+    }
     logger.info(
-        "Recomendação para cliente (job=%s, contact=%s) via política %s: %s",
+        "Recomendação %s para cliente (job=%s, contact=%s): %s",
+        recommendation_id,
         client.job,
         client.contact,
-        policy,
         recommendation.arm_id,
     )
     return RecommendationResponse(
+        recommendation_id=recommendation_id,
         arm_id=recommendation.arm_id,
         arm_name=recommendation.arm_name,
         channel=recommendation.channel,
         score=recommendation.score,
         segment=recommendation.segment,
-        algorithm=app_state["policy_meta"][policy]["algorithm"],
-        policy=policy,
+        algorithm=app_state["policy_meta"]["algorithm"],
+    )
+
+
+@app.post("/outcome", response_model=OutcomeResponse)
+def outcome(body: OutcomeRequest) -> OutcomeResponse:
+    """
+    Fecha o loop: registra se o cliente aceitou ou não a oferta e atualiza o posterior do
+    braço/segmento servidos — é isso que faz a próxima chamada explorar/explotar de novo em
+    cima de evidência real, e não só da política congelada no treino.
+
+    `recommendation_id` só pode ser resolvido uma vez: a segunda tentativa (ou um id que
+    nunca existiu) devolve 404, em vez de contar o mesmo desfecho duas vezes.
+    """
+    recommender = _recommender()
+    decision = app_state["decisions"].pop(body.recommendation_id, None)
+    if decision is None:
+        raise HTTPException(
+            status_code=404,
+            detail="recommendation_id desconhecido, ou o desfecho dele já foi registrado.",
+        )
+
+    reward = 1.0 if body.accepted else 0.0
+    recommender.record_outcome(decision["arm_id"], decision["segment"], reward)
+    logger.info(
+        "Desfecho %s: braço %s (segmento %s) — %s",
+        body.recommendation_id,
+        decision["arm_id"],
+        decision["segment"],
+        "aceitou" if body.accepted else "recusou",
+    )
+    return OutcomeResponse(
+        recommendation_id=body.recommendation_id,
+        arm_id=decision["arm_id"],
+        segment=decision["segment"],
+        reward=reward,
     )
 
 
 @app.post("/segment", response_model=SegmentResponse)
-def segment(
-    client: ClientFeatures,
-    policy: PolicyChoice = Query(default=PUBLISHED, description="Qual crença calcula o segmento."),
-) -> SegmentResponse:
+def segment(client: ClientFeatures) -> SegmentResponse:
     """
     Só o passo "atributos → segmento", sem sortear nem gastar o estado da política.
 
@@ -325,12 +341,12 @@ def segment(
     edita um campo, sem forçar um sorteio Thompson a cada tecla — `POST /recommend` é o
     único caminho que decide de fato e consome aleatoriedade.
     """
-    recommender = _recommender_for(policy)
+    recommender = _recommender()
     result = recommender.segment_for(client.model_dump())
     if result is None:
         raise HTTPException(
             status_code=400,
-            detail=f"A crença '{policy}' não é contextual — não há segmento a calcular.",
+            detail="A política carregada não é contextual — não há segmento a calcular.",
         )
     return SegmentResponse(segment=result)
 

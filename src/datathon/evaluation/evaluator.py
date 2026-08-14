@@ -39,7 +39,6 @@ from ..client_personas import CLIENT_PERSONAS
 from ..policy_artifact import (
     CATALOG_PATH,
     EXPERIMENT_NAME,
-    LEARNING_POLICY_PATH,
     LOCAL_POLICY_PATH,
     PROJECT_ROOT,
 )
@@ -66,17 +65,7 @@ Baseline principal do uplift: sempre a melhor oferta segundo o catálogo.
 RANDOM_BASELINE = "baseline_aleatorio"
 
 GOLDEN_SET_PATH = PROJECT_ROOT / "tests" / "golden" / "golden_set.json"
-LEARNING_GOLDEN_PATH = PROJECT_ROOT / "tests" / "golden" / "golden_set_em_aprendizado.json"
 REPORT_PATH = PROJECT_ROOT / "reports" / "etapa4_avaliacao.md"
-
-LEARNING_HORIZON = 500
-"""
-Horizonte curto do segundo golden set.
-
-A política publicada foi treinada em 20.000 clientes e seus posteriors por segmento já
-concentraram. Um snapshot com 500 clientes captura o início do aprendizado, quando a
-exploração ainda está mais ativa, tornando o contraste da demo legível.
-"""
 
 
 @dataclass(frozen=True)
@@ -245,15 +234,8 @@ def build_golden_set(
     policy_state: Dict[str, Any],
     catalog: Dict[str, Any],
     nota: str = DEFAULT_NOTE,
-    embed_policy_state: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Congela a recomendação atual para os cinco clientes fixos.
-
-    `embed_policy_state` guarda a própria política dentro do arquivo. É o que o golden "em
-    aprendizado" usa: a crença dele não é a publicada em `data/processed/`, é um snapshot
-    de horizonte curto que só existe aqui — sem embutir, não haveria como reproduzi-lo.
-    """
+    """Congela a recomendação atual para os cinco clientes fixos."""
     recommender = OfferRecommender(policy_state=policy_state, catalog=catalog)
     cases = [
         {
@@ -264,7 +246,7 @@ def build_golden_set(
         }
         for case in GOLDEN_CLIENTS
     ]
-    golden = {
+    return {
         "algorithm": policy_state.get("algorithm"),
         "policy_fingerprint": policy_fingerprint(policy_state),
         "catalog_version": catalog.get("version"),
@@ -272,30 +254,6 @@ def build_golden_set(
         "nota": nota,
         "cases": cases,
     }
-    if embed_policy_state:
-        golden["policy_state"] = policy_state
-    return golden
-
-
-def train_snapshot_policy(catalog: Dict[str, Any], n_clients: int = LEARNING_HORIZON) -> Dict[str, Any]:
-    """
-    Treina um Thompson Sampling em horizonte curto e devolve o estado serializado.
-
-    Mesmas seeds e mesmo ambiente do treino de produção — só o horizonte muda. Assim o
-    snapshot é literalmente "a política de produção mais cedo na vida dela", e não um
-    segundo modelo com outra configuração.
-    """
-    clients = (
-        pd.read_parquet(CLIENTS_PATH, engine="pyarrow")
-        .sample(n=n_clients, random_state=SAMPLING_SEED)
-        .reset_index(drop=True)
-    )
-    environment = OfferEnvironment(clients, catalog, seed=OUTCOME_SEED)
-    policy = build_policies([a["arm_id"] for a in catalog["arms"]], catalog["arms"])[
-        "contextual_thompson_sampling"
-    ]
-    run_policy(policy, environment)
-    return {**policy.to_dict(), "trained_on_n_clients": n_clients}
 
 
 def _as_expected(recommendation: Any) -> Dict[str, Any]:
@@ -349,26 +307,6 @@ def main() -> None:
 
         published = json.loads(LOCAL_POLICY_PATH.read_text(encoding="utf-8"))
         _write_golden(GOLDEN_SET_PATH, build_golden_set(published, catalog))
-
-        snapshot = train_snapshot_policy(catalog)
-        LEARNING_POLICY_PATH.write_text(
-            json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
-        logger.info("Snapshot em aprendizado publicado em %s (a demo o consome).", LEARNING_POLICY_PATH)
-        _write_golden(
-            LEARNING_GOLDEN_PATH,
-            build_golden_set(
-                snapshot,
-                catalog,
-                nota=(
-                    f"Snapshot da mesma política com apenas {LEARNING_HORIZON} clientes de "
-                    "treino, quando a exploração ainda está ativa. Contraste com "
-                    "`golden_set.json` (20.000 clientes), onde o posterior já convergiu para "
-                    "um conjunto estável de ofertas por segmento. A política é contextual."
-                ),
-                embed_policy_state=True,
-            ),
-        )
 
 
 def _write_golden(path, golden: Dict[str, Any]) -> None:

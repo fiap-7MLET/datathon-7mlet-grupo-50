@@ -38,3 +38,30 @@ def test_serialization_preserves_the_contextual_posteriors():
     restored = ContextualThompsonSamplingPolicy.from_dict(policy.to_dict())
 
     assert restored.to_dict() == policy.to_dict()
+
+
+def test_update_without_context_falls_back_to_the_last_select_arm_call():
+    """Contrato usado pelo loop de simulação sequencial (`training/simulation.py`)."""
+    policy = ContextualThompsonSamplingPolicy(["a", "b"], seed=1)
+    policy.select_arm({"job": "retired"})
+
+    policy.update("a", 1)
+
+    assert policy.posteriors["retired"]["a"] == [2.0, 1.0]
+    assert policy.posteriors["general"]["a"] == [1.0, 1.0]
+
+
+def test_update_with_context_targets_that_segment_even_if_another_was_selected_since():
+    """
+    Reproduz o bug corrigido: um `select_arm` de outro segmento no meio-tempo (ex: outra
+    requisição concorrente) não pode desviar onde o feedback é aplicado quando quem chama
+    `update` passa o `context` de onde a recomendação original veio.
+    """
+    policy = ContextualThompsonSamplingPolicy(["a", "b"], seed=1)
+    policy.select_arm({"job": "retired"})  # define _last_segment = "retired"
+    policy.select_arm({"job": "student", "contact": "cellular"})  # sobrescreve para "student_digital"
+
+    policy.update("a", 1, context={"job": "retired"})
+
+    assert policy.posteriors["retired"]["a"] == [2.0, 1.0]
+    assert policy.posteriors["student_digital"]["a"] == [1.0, 1.0]

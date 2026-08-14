@@ -89,7 +89,7 @@ CLIENT_PERSONAS: List[Dict[str, Any]] = [
         },
     },
     {
-        "case_id": "digital_channel_massa",
+        "case_id": "digital_channel",
         "descricao": "Cliente típico da maior fatia da base (54% em canal digital).",
         "seed": GOLDEN_SEED,
         "client": {

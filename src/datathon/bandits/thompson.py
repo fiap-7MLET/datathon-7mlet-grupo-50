@@ -45,7 +45,9 @@ class ThompsonSamplingPolicy(BanditPolicy):
     def reseed(self, seed: Optional[int]) -> None:
         self._rng.seed(seed)
 
-    def update(self, arm_id: str, reward: float) -> None:
+    def update(
+        self, arm_id: str, reward: float, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         self._check_arm(arm_id)
         self.alpha[arm_id] += reward
         self.beta[arm_id] += (1 - reward)
