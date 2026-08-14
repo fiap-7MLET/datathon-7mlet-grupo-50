@@ -138,7 +138,7 @@ está sendo servida e se ela veio do MLflow ou do arquivo local. `GET /` redirec
 | API | FastAPI | Validação por schema (Pydantic) e documentação OpenAPI automática. |
 | Rastreamento | MLflow local | Ferramenta do curso; registra parâmetros, métricas e o artefato da política. |
 
-### Governança, privacidade e limitações
+### Governança e privacidade
 
 Este projeto tem finalidade exclusivamente acadêmica e utiliza uma base pública, histórica e
 sem identificadores diretos de clientes. Não são usados patrimônio, renda, gênero ou raça. A
@@ -152,62 +152,6 @@ ou anonimização. Acesso aos dados, políticas e artefatos seria restrito e aud
 sensíveis, como concessão ou recusa de crédito, não seriam automatizadas por esta política: o
 bandit apenas recomenda uma oferta e casos com impacto financeiro relevante permaneceriam com
 revisão humana e possibilidade de contestação.
-
-As principais limitações são o caráter histórico da base, o predomínio de campanhas telefônicas,
-o desbalanceamento da conversão e a ausência de resultados reais para as ofertas sintéticas. As
-taxas e recompensas simuladas servem para comparar políticas em condições controladas, não para
-estimar o comportamento atual de clientes. Atributos como idade, ocupação e estado civil podem
-introduzir vieses e precisariam de avaliação periódica de desempenho por grupo antes de qualquer
-uso real. Em produção, conversão, exploração, distribuição das ofertas, mudanças de contexto e
-possíveis disparidades entre grupos seriam monitoradas, com suspensão ou retorno a uma política
-segura quando os limites definidos pela governança fossem ultrapassados.
-
-#### Dados e recompensa
-
-- Oito das nove ofertas do catálogo são estimativas de negócio, não taxas medidas. Apenas
-  `arm_001` é ancorado na taxa real de conversão do dataset (`0,113`).
-- As recompensas são simuladas e, portanto, não demonstram causalidade nem garantem desempenho
-  em produção.
-- O modelo de recompensa atrasada (`reward_delay_days`) está definido no catálogo e é usado pelo
-  gerador sintético independente, mas não participa do ambiente principal de treino e avaliação,
-  no qual a recompensa é observada imediatamente após cada decisão.
-
-#### Algoritmos
-
-- **Epsilon-Greedy:** utiliza `epsilon=0,10` fixo, sem decaimento. Mesmo depois de convergir,
-  continua destinando 10% das decisões à exploração aleatória.
-- **UCB1:** é determinístico dado o histórico e sensível à ordem do *warm-up*, no qual cada braço
-  é selecionado uma vez antes da aplicação da fórmula.
-- **Thompson Sampling global e contextual:** usam o prior neutro Beta(1, 1), sem incorporar
-  conhecimento prévio de negócio sobre a propensão de conversão das ofertas.
-- **Thompson Sampling contextual:** divide a evidência entre seis segmentos. Segmentos raros,
-  como `previous_converter`, recebem menos observações e convergem mais lentamente que segmentos
-  frequentes.
-- **Cold start:** Thompson global, Thompson contextual, UCB1 e Epsilon-Greedy começam sem
-  observações. As primeiras decisões de cada braço — e de cada par segmento-braço no caso
-  contextual — são, por definição, pouco informadas.
-
-#### Sistema
-
-- O braço "Poupança estudantil" é matematicamente o mais atraente no catálogo para
-  `digital_channel`, segmento que não é exclusivo de estudantes. Existe, portanto, um desalinho
-  entre o nome comercial do produto e o público para o qual ele pode ser recomendado.
-- O MLflow é local e seu estado de tracking não é versionado. A evidência reproduzível no
-  repositório é formada pelo comando de treino, pelo relatório de avaliação e pelo JSON da
-  política publicada.
-- A promoção da política usa uma tag no MLflow e mantém uma cópia em JSON local como
-  contingência; não há banco de dados de políticas nem um Model Registry formalmente versionado.
-- O `POST /outcome` atualiza o posterior somente na memória do processo. Ao reiniciar ou fazer
-  novo deploy, a API recarrega o estado publicado e perde as atualizações online posteriores;
-  réplicas diferentes também não compartilham essas atualizações.
-- A API não possui autenticação nem *rate limiting*. Isso é aceitável para a demonstração, mas
-  inadequado para exposição em produção.
-- Mudanças de comportamento dos clientes ao longo do tempo não são modeladas. A simulação assume
-  um ambiente estacionário, com probabilidades de recompensa fixas.
-- Treino, avaliação e serviço executam em uma única máquina, sem fila de eventos ou processamento
-  distribuído.
-- `tests/test_contracts.py` está vazio. O arquivo é código morto e permanece como decisão
-  pendente: implementar os testes de contrato planejados ou removê-lo.
 
 ### Resultado (20.000 clientes simulados)
 
