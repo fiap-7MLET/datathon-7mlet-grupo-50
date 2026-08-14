@@ -213,10 +213,6 @@ segmento decide a oferta.
    sem fixar a seed — a política sorteia de verdade a cada chamada — e conta quantas vezes
    cada oferta saiu, provando ao vivo que a exploração é real.
 
-A demo serve só a política publicada — não há seletor de crenças. A evidência de decadência
-da exploração ao longo do treino fica em `reports/etapa4_avaliacao.md` (coluna
-"concentração", para todas as políticas).
-
 A seed usada em cada chamada também não aparece mais na tela — é um parâmetro técnico sem
 explicação de negócio (ver "Reprodutibilidade" abaixo); continua sendo enviada por baixo dos
 panos, e dá para conferir no painel "Resposta crua da API", que mostra a URL completa da
