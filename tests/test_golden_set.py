@@ -1,16 +1,9 @@
 """
-Golden sets da Etapa 4 — cinco casos congelados, em dois momentos da vida da política.
+Golden set da Etapa 4 — cinco casos congelados, dada uma política e uma seed fixa.
 
 O que estes testes protegem: dada uma política e uma seed fixa, a recomendação é sempre a
 mesma. É o contrato de reprodutibilidade descrito no README, e é o que permite gravar a demo da
 Etapa 8 sabendo de antemão o que a API vai responder.
-
-São dois arquivos, e o contraste entre eles é o argumento da Etapa 4:
-
-- `golden_set.json` — política publicada, treinada em 20.000 clientes. Os cinco casos
-  recebem **a mesma** oferta: o posterior convergiu e a exploração cessou.
-- `golden_set_em_aprendizado.json` — a mesma política com 500 clientes de treino, com a
-  crença ainda difusa. Os casos recebem ofertas **diferentes**: exploração viva.
 
 Se a política publicada for retreinada e a crença mudar, o fingerprint deixa de bater e o
 teste falha pedindo `uv run datathon-evaluate --write-golden`. Isso é intencional: mudou o
@@ -22,11 +15,7 @@ import json
 import pytest
 
 from datathon.api.recommender import OfferRecommender
-from datathon.evaluation.evaluator import (
-    GOLDEN_SET_PATH,
-    LEARNING_GOLDEN_PATH,
-    policy_fingerprint,
-)
+from datathon.evaluation.evaluator import GOLDEN_SET_PATH, policy_fingerprint
 from datathon.policy_artifact import CATALOG_PATH, LOCAL_POLICY_PATH
 
 REGENERATE = "Rode `uv run datathon-evaluate --write-golden` para regravar o golden set."
@@ -41,17 +30,6 @@ def _load(path):
 @pytest.fixture(scope="module")
 def golden():
     return _load(GOLDEN_SET_PATH)
-
-
-@pytest.fixture(scope="module")
-def learning_golden():
-    return _load(LEARNING_GOLDEN_PATH)
-
-
-@pytest.fixture(params=["publicado", "em_aprendizado"])
-def any_golden(request, golden, learning_golden):
-    """Os dois arquivos obedecem ao mesmo contrato — os testes estruturais valem para ambos."""
-    return golden if request.param == "publicado" else learning_golden
 
 
 @pytest.fixture(scope="module")
@@ -75,20 +53,20 @@ def test_golden_set_matches_the_published_policy(golden, policy_state):
     )
 
 
-def test_golden_set_has_the_five_cases_the_spec_asks_for(any_golden):
-    cases = any_golden["cases"]
+def test_golden_set_has_the_five_cases_the_spec_asks_for(golden):
+    cases = golden["cases"]
 
     assert len(cases) == 5
     assert len({case["case_id"] for case in cases}) == 5, "case_id duplicado"
 
 
-def test_golden_cases_share_the_same_seed(any_golden):
+def test_golden_cases_share_the_same_seed(golden):
     """
     De propósito: seed diferente por caso permitiria confundir "mudou de oferta por causa
     do perfil" com "mudou por causa do sorteio". Com uma seed só, a única variável que resta
     entre os 5 casos é o segmento — ver docstring de `client_personas.py`.
     """
-    cases = any_golden["cases"]
+    cases = golden["cases"]
 
     assert len({case["seed"] for case in cases}) == 1, "seeds deveriam ser todas iguais"
 
@@ -109,23 +87,6 @@ def test_each_golden_case_reproduces_its_frozen_recommendation(golden, policy_st
     assert obtained == expected, REGENERATE
 
 
-def test_the_learning_snapshot_reproduces_from_its_own_embedded_policy(learning_golden, catalog):
-    """
-    O golden "em aprendizado" carrega a própria política dentro do arquivo — a crença dele
-    não é a publicada. Sem isso não seria reproduzível fora do script que o gerou.
-    """
-    recommender = OfferRecommender(
-        policy_state=learning_golden["policy_state"], catalog=catalog
-    )
-
-    obtained = [
-        recommender.recommend(context=case["client"], seed=case["seed"]).arm_id
-        for case in learning_golden["cases"]
-    ]
-
-    assert obtained == [case["expected"]["arm_id"] for case in learning_golden["cases"]]
-
-
 def test_the_published_policy_personalizes(golden):
     """
     Perfis de segmentos distintos devem demonstrar personalização no artefato publicado.
@@ -135,29 +96,19 @@ def test_the_published_policy_personalizes(golden):
     assert len(arms) > 1, "Perfis distintos deveriam produzir mais de uma oferta. " + REGENERATE
 
 
-def test_the_learning_snapshot_still_explores(learning_golden):
-    """A contraparte: cedo no treino, seeds diferentes levam a ofertas diferentes."""
-    arms = {case["expected"]["arm_id"] for case in learning_golden["cases"]}
-
-    assert len(arms) > 1, (
-        "O snapshot de horizonte curto deveria mostrar exploração; se colapsou, ele perdeu "
-        "a função de contraste. " + REGENERATE
-    )
-
-
-def test_golden_recommendations_carry_valid_catalog_offers(any_golden, catalog):
+def test_golden_recommendations_carry_valid_catalog_offers(golden, catalog):
     """Toda oferta congelada tem de existir no catálogo, com o nome de negócio certo."""
     arms = {arm["arm_id"]: arm for arm in catalog["arms"]}
 
-    for case in any_golden["cases"]:
+    for case in golden["cases"]:
         arm_id = case["expected"]["arm_id"]
         assert arm_id in arms, f"{case['case_id']} aponta para braço inexistente: {arm_id}"
         assert case["expected"]["arm_name"] == arms[arm_id]["name"]
 
 
-def test_golden_set_states_that_the_policy_is_contextual(any_golden):
+def test_golden_set_states_that_the_policy_is_contextual(golden):
     """
     O arquivo registra explicitamente que o perfil participa da decisão.
     """
-    assert any_golden["contextual"] is True
-    assert "contextual" in any_golden["nota"]
+    assert golden["contextual"] is True
+    assert "contextual" in golden["nota"]

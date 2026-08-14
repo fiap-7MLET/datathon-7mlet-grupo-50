@@ -217,13 +217,9 @@ segmento decide a oferta.
    sem fixar a seed — a política sorteia de verdade a cada chamada — e conta quantas vezes
    cada oferta saiu, provando ao vivo que a exploração é real.
 
-A demo não mostra mais um seletor de "crença publicada vs. em aprendizado" — simplificação
-deliberada: as duas políticas eram o mesmo algoritmo em dois pontos de treino diferentes
-(20.000 vs. 500 clientes), pensadas para ilustrar a decadência da exploração, mas essa
-evidência já está coberta por `reports/etapa4_avaliacao.md` (coluna "concentração", para
-todas as políticas), então manter as duas na tela só somava uma explicação sem necessidade.
-O snapshot de 500 clientes continua sendo gerado e testado (`uv run datathon-evaluate
---write-golden`, `tests/golden/golden_set_em_aprendizado.json`) — só não aparece mais aqui.
+A demo serve só a política publicada — não há seletor de crenças. A evidência de decadência
+da exploração ao longo do treino fica em `reports/etapa4_avaliacao.md` (coluna
+"concentração", para todas as políticas).
 
 A seed usada em cada chamada também não aparece mais na tela — é um parâmetro técnico sem
 explicação de negócio (ver "Reprodutibilidade" abaixo); continua sendo enviada por baixo dos

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from datathon.api.main import DEMO_PAGE, app
-from datathon.policy_artifact import LEARNING_POLICY_PATH, LOCAL_POLICY_PATH
+from datathon.policy_artifact import LOCAL_POLICY_PATH
 
 CLIENT_PAYLOAD = {
     "age": 35,
@@ -45,7 +45,6 @@ def test_health_reports_the_policy_being_served(client):
     assert body["status"] == "ok"
     assert body["algorithm"] == "contextual_thompson_sampling"
     assert body["n_arms"] > 1
-    assert "publicada" in body["policies_available"]
 
 
 def test_recommend_returns_an_offer_for_a_client(client):
@@ -53,7 +52,6 @@ def test_recommend_returns_an_offer_for_a_client(client):
 
     assert body["arm_id"].startswith("arm_")
     assert body["arm_name"]
-    assert body["policy"] == "publicada"
 
 
 def test_recommend_reports_the_segment_the_client_activated(client):
@@ -137,31 +135,6 @@ def test_personas_match_the_golden_cases(client):
 
     assert [p["case_id"] for p in personas] == [c["case_id"] for c in GOLDEN_CLIENTS]
     assert [p["seed"] for p in personas] == [c["seed"] for c in GOLDEN_CLIENTS]
-
-
-def test_asking_for_a_policy_that_was_never_generated_explains_how_to_generate_it(client):
-    """Erro acionável em vez de 500 opaco — a demo é montada sob pressão de tempo."""
-    if LEARNING_POLICY_PATH.exists():
-        pytest.skip("Snapshot da demo presente; este teste cobre a ausência dele.")
-
-    response = client.get("/policy?policy=em_aprendizado")
-
-    assert response.status_code == 404
-    assert "datathon-evaluate" in response.json()["detail"]
-
-
-def test_the_learning_snapshot_is_served_when_present(client):
-    """Quando o snapshot existe, ele responde — é o contraste que a demo mostra."""
-    if not LEARNING_POLICY_PATH.exists():
-        pytest.skip("Snapshot da demo ausente. Rode `uv run datathon-evaluate --write-golden`.")
-
-    body = client.get("/policy?policy=em_aprendizado").json()
-    published = client.get("/policy").json()
-
-    assert body["trained_on_n_clients"] < published["trained_on_n_clients"]
-    assert sum(arm["observations"] for arm in body["arms"]) < sum(
-        arm["observations"] for arm in published["arms"]
-    )
 
 
 def test_the_demo_page_is_served_and_needs_no_external_resources(client):
