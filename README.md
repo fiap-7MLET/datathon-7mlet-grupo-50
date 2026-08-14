@@ -18,6 +18,23 @@ aprende com as respostas observadas.
 Nota: A coluna `duration` é descartada por vazamento temporal. Detalhes em
 [`data/kaggle/README.md`](data/kaggle/README.md) e [`docs/data_dictionary.md`](docs/data_dictionary.md).
 
+### Notebooks
+
+Os notebooks documentam a evolução da análise até a escolha da política adaptativa:
+
+1. [`01_eda.ipynb`](notebooks/01_eda.ipynb) - realiza a análise exploratória do Bank
+   Marketing Dataset, verificando qualidade, valores ausentes, duplicidades, outliers,
+   vazamento de dados, desbalanceamento da variável-alvo e segmentos com maior ou menor
+   propensão à conversão.
+2. [`02_synthetic_enrichment.ipynb`](notebooks/02_synthetic_enrichment.ipynb) - usa os
+   resultados da análise exploratória para definir segmentos de clientes, calibrar taxas
+   base de conversão e multiplicadores e, assim, fundamentar a geração dos dados sintéticos
+   usados no ambiente de simulação.
+3. [`03_baseline_e_thompson_sampling.ipynb`](notebooks/03_baseline_e_thompson_sampling.ipynb)
+   — compara os baselines fixo e aleatório com Thompson Sampling, UCB1 e Epsilon-Greedy em
+   um cenário reproduzível. Também avalia o Thompson Sampling contextual por
+   segmento e documenta sua escolha como política final de produção.
+
 ### Mapa de pastas do projeto
 
 ```
