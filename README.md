@@ -1,7 +1,10 @@
-# datathon-7mlet-grupo-58 — Plataforma de Ofertas Adaptativas
+# Tech Challenge Fase 05 -  Plataforma de Ofertas Adaptativas
 
-Datathon 7MLET. **Visão do problema:** experimentação adaptativa para ofertas bancárias
-usando multi-armed bandit.
+Datathon 7MLET - Grupo 58
+
+Integrantes: Fernando Leitão, Maria Beatriz Gois, Rafael Melazzo e Allan Vital
+
+**Visão do problema:** experimentação adaptativa para ofertas bancárias usando multi-armed bandit.
 
 Uma instituição financeira digital precisa decidir, em cada canal, qual oferta apresentar a
 cada cliente elegível. Regras fixas e testes A/B longos desperdiçam tráfego e demoram a
