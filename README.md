@@ -20,7 +20,7 @@ aprende com as respostas observadas.
 
 Nota 1: A coluna `duration` é descartada por vazamento temporal. Detalhes em
 [`data/kaggle/README.md`](data/kaggle/README.md) e [`docs/data_dictionary.md`](docs/data_dictionary.md).
-Nota 2: O dataset real tem só UM produto (o depósito a prazo). As outras 8 ofertas do catálogo simulado deste projeto são estimativas de negócio, não medidas.
+Nota 2: O dataset real tem só UM produto (o depósito a prazo) com 11,3% de conversão. As outras 8 ofertas do catálogo simulado deste projeto são estimativas de negócio, simuladas e não medidas originalmente.
 
 ### Notebooks
 
