@@ -55,6 +55,7 @@ notebooks/              # 01 EDA · 02 enriquecimento sintético · 03 baseline 
 data/                   # kaggle (bruto) · processed (tratado + política) · synthetic_enrichment (catálogo)
 tests/golden/           # os 5 casos congelados da Etapa 4
 reports/                # relatório versionado, gerado por datathon-evaluate
+docs                    # documentação referente ao dicionário de dados, relatório de qualidade e racional associado a criação das ofertas e segmentos
 ```
 
 ## 1. Instruções de execução local
