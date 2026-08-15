@@ -18,8 +18,9 @@ aprende com as respostas observadas.
 * **Link:** https://www.kaggle.com/code/henriqueyamahata/bank-marketing-classification-roc-f1-recall
 * **Autor original:** UCI Machine Learning Repository (via Kaggle notebook)
 
-Nota: A coluna `duration` é descartada por vazamento temporal. Detalhes em
+Nota 1: A coluna `duration` é descartada por vazamento temporal. Detalhes em
 [`data/kaggle/README.md`](data/kaggle/README.md) e [`docs/data_dictionary.md`](docs/data_dictionary.md).
+Nota 2: O dataset real tem só UM produto (o depósito a prazo). As outras 8 ofertas do catálogo simulado deste projeto são estimativas de negócio, não medidas.
 
 ### Notebooks
 
